@@ -13,6 +13,8 @@
 
 import sys, os
 
+from sphinx.directives import TocTree
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
@@ -337,3 +339,32 @@ epub_copyright = u'2012, Thomas S Hatch'
 
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {'http://docs.python.org/': None}
+
+
+def skip_mod_init_member(app, what, name, obj, skip, options):
+    if name.startswith('_'):
+        return True
+    if isinstance(obj, types.FunctionType) and obj.__name__ == 'mod_init':
+        return True
+    return False
+
+
+def _normalize_version(args):
+    _, path = args
+    return '.'.join([x.zfill(4) for x in (path.split('/')[-1].split('.'))])
+
+
+class ReleasesTree(TocTree):
+    option_spec = dict(TocTree.option_spec)
+
+    def run(self):
+        rst = super(ReleasesTree, self).run()
+        entries = rst[0][0]['entries'][:]
+        entries.sort(key=_normalize_version, reverse=True)
+        rst[0][0]['entries'][:] = entries
+        return rst
+
+def setup(app):
+    app.add_directive('releasestree', ReleasesTree)
+    app.connect('autodoc-skip-member', skip_mod_init_member)
+
