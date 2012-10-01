@@ -3,6 +3,7 @@ The top level interface used to translate configuration data back to the
 correct cloud modules
 '''
 # Import python libs
+import sys
 import os
 import copy
 import multiprocessing
@@ -11,6 +12,7 @@ import multiprocessing
 import saltcloud.utils
 import saltcloud.loader
 import salt.client
+import salt.utils
 
 # Import third party libs
 import yaml
@@ -167,6 +169,7 @@ class Cloud(object):
                     found = True
                     if name in pmap.get(self.provider(vm_), []):
                         # The specified vm already exists, don't make it anew
+                        print("{0} already exists on {1}".format(name, self.provider(vm_)))
                         continue
                     vm_['name'] = name
                     if self.opts['parallel']:
@@ -194,7 +197,8 @@ class Map(Cloud):
         if not self.opts['map']:
             return {}
         if not os.path.isfile(self.opts['map']):
-            return {}
+            sys.stderr.write('The specified map file does not exist: {0}\n'.format(self.opts['map']))
+            sys.exit(1)
         try:
             with open(self.opts['map'], 'rb') as fp_:
                 map_ = yaml.load(fp_.read())
@@ -216,19 +220,23 @@ class Map(Cloud):
         for profile in self.map:
             pdata = {}
             for pdef in self.opts['vm']:
-                # Tha named profile does not exist
+                # The named profile does not exist
                 if pdef.get('profile', '') == profile:
                     pdata = pdef
             if not pdata:
                 continue
             for name in self.map[profile]:
-                defined.add(name)
-                ret['create'][name] = pdata
+                nodename = name
+                if isinstance(name, dict):
+                    nodename = (name.keys()[0])
+                defined.add(nodename)
+                ret['create'][nodename] = pdata
         for prov in pmap:
             for name in pmap[prov]:
                 exist.add(name)
                 if name in ret['create']:
-                    ret['create'].pop(name)
+                    if prov != 'aws' or pmap['aws'][name]['state'] != 2:
+                      ret['create'].pop(name)
         if self.opts['hard']:
             # Look for the items to delete
             ret['destroy'] = exist.difference(defined)
@@ -251,9 +259,23 @@ class Map(Cloud):
         if not res.lower().startswith('y'):
             return
         # We are good to go, execute!
+        # Generate the fingerprint of the master pubkey in
+        #     order to mitigate man-in-the-middle attacks
+        master_pub = self.opts['pki_dir'] + '/master.pub'
+        master_finger = ''
+        if os.path.isfile(master_pub) and hasattr(salt.utils, 'pem_finger'):
+            master_finger = salt.utils.pem_finger(master_pub)
         for name, profile in dmap['create'].items():
             tvm = copy.deepcopy(profile)
             tvm['name'] = name
+            tvm['master_finger'] = master_finger
+            for miniondict in self.map[tvm['profile']]:
+                if isinstance(miniondict, dict):
+                    if name in miniondict:
+                        if 'grains' in miniondict[name]:
+                            tvm['map_grains'] = miniondict[name]['grains']
+                        if 'minion' in miniondict[name]:
+                            tvm['map_minion'] = miniondict[name]['minion']
             if self.opts['parallel']:
                 multiprocessing.Process(
                         target=lambda: self.create(tvm)

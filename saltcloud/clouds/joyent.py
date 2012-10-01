@@ -2,7 +2,7 @@
 Joyent Cloud Module
 ===================
 
-The Joyent Cloud module is used to intereact with the Joyend cloud system
+The Joyent Cloud module is used to intereact with the Joyent cloud system
 
 it requires that the username and password to the joyent accound be configured
 
@@ -76,7 +76,16 @@ def create(vm_):
     kwargs['name'] = vm_['name']
     kwargs['image'] = get_image(conn, vm_)
     kwargs['size'] = get_size(conn, vm_)
-    data = conn.create_node(**kwargs)
+    try:
+        data = conn.create_node(**kwargs)
+    except Exception as exc:
+        err = ('Error creating {0} on JOYENT\n\n'
+               'The following exception was thrown by libcloud when trying to '
+               'run the initial deployment: \n{1}').format(
+                       vm_['name'], exc.message
+                       )
+        sys.stderr.write(err)
+        return False
     if saltcloud.utils.wait_for_ssh(data.public_ips[0]):
         cmd = ('ssh -oStrictHostKeyChecking=no -t -i {0} {1}@{2} '
                '"{3}"').format(

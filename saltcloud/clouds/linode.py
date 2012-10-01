@@ -17,6 +17,7 @@ the cloud configuration file
 # Import python libs
 import os
 import types
+import paramiko
 
 # Import libcloud
 from libcloud.compute.types import Provider
@@ -92,14 +93,33 @@ def create(vm_):
     '''
     print('Creating Cloud VM {0}'.format(vm_['name']))
     conn = get_conn()
+    deploy_script = script(vm_)
     kwargs = {}
     kwargs['name'] = vm_['name']
-    kwargs['deploy'] = script(vm_)
     kwargs['image'] = get_image(conn, vm_)
     kwargs['size'] = get_size(conn, vm_)
     kwargs['location'] = get_location(conn, vm_)
     kwargs['auth'] = NodeAuthPassword(get_password(vm_))
-    data = conn.deploy_node(**kwargs)
+    try:
+        data = conn.create_node(**kwargs)
+    except Exception as exc:
+        err = ('Error creating {0} on LINODE\n\n'
+               'The following exception was thrown by libcloud when trying to '
+               'run the initial deployment: \n{1}').format(
+                       vm_['name'], exc.message
+                       )
+        sys.stderr.write(err)
+        return False
+    deployed = saltcloud.utils.deploy_script(
+        host=data.public_ips[0],
+        username='root',
+        password=__opts__['LINODE.password'],
+        script=deploy_script.script)
+    if deployed:
+        print('Salt installed on {0}'.format(vm_['name']))
+    else:
+        print('Failed to start Salt on Cloud VM {0}'.format(vm_['name']))
+
     print('Created Cloud VM {0} with the following values:'.format(
         vm_['name']
         ))

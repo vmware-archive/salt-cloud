@@ -77,7 +77,7 @@ EC2_LOCATIONS = {
     'us-west-1': Provider.EC2_US_WEST,
     'us-west-2': Provider.EC2_US_WEST_OREGON
 }
-DEFAULT_LOCATION = 'ec2'
+DEFAULT_LOCATION = 'us-east-1'
 
 
 def get_conn(**kwargs):
@@ -87,6 +87,8 @@ def get_conn(**kwargs):
     if 'location' in kwargs:
         location = kwargs['location']
         if location not in EC2_LOCATIONS:
+            sys.stderr.write('The specified location does not seem to be valid: {0}\n'.format(location))
+            sys.exit(1)
             return None     #TODO raise exception
     else:
         location = DEFAULT_LOCATION
@@ -102,21 +104,34 @@ def keyname(vm_):
     '''
     Return the keyname
     '''
-    return str(vm_.get('AWS.keyname', __opts__.get('AWS.keyname', '')))
+    return str(vm_.get('keyname', __opts__.get('AWS.keyname', '')))
 
 
 def securitygroup(vm_):
     '''
     Return the security group
     '''
-    return str(vm_.get('AWS.securitygroup', __opts__.get('AWS.securitygroup', 'default')))
+    return vm_.get('securitygroup', __opts__.get('AWS.securitygroup', 'default'))
+    securitygroups = vm_.get('securitygroup', __opts__.get('AWS.securitygroup', 'default'))
+    if not isinstance(securitygroups, list):
+        securitygroup = securitygroups
+        securitygroups = [securitygroup]
+    return securitygroups
 
 
 def ssh_username(vm_):
     '''
     Return the ssh_username. Defaults to 'ec2-user'.
     '''
-    return vm_.get('ssh_username', __opts__.get('AWS.ssh_username', 'ec2-user'))
+    usernames = vm_.get('ssh_username', __opts__.get('AWS.ssh_username', 'ec2-user'))
+    if not isinstance(usernames, list):
+        username = usernames
+        usernames = [username]
+    if not 'ec2-user' in usernames:
+        usernames.append('ec2-user')
+    if not 'root' in usernames:
+        usernames.append('root')
+    return usernames
 
 
 def ssh_interface(vm_):
@@ -159,8 +174,8 @@ def create(vm_):
     location = get_location(vm_)
     print('Creating Cloud VM {0} in {1}'.format(vm_['name'], location))
     conn = get_conn(location=location)
-    kwargs = {'ssh_username': ssh_username(vm_),
-              'ssh_key': __opts__['AWS.private_key']}
+    usernames = ssh_username(vm_)
+    kwargs = {'ssh_key': __opts__['AWS.private_key']}
     kwargs['name'] = vm_['name']
     deploy_script = script(vm_)
     kwargs['image'] = get_image(conn, vm_)
@@ -175,15 +190,14 @@ def create(vm_):
     try:
         data = conn.create_node(**kwargs)
     except Exception as exc:
-        err = ('The following exception was thrown by libcloud when trying to '
-               'run the initial deployment: \n{0}\n\nThe vm {1} has been '
-               'created but Salt could not be intsalled. Please verify that '
-               'your ssh keys are in order and that the security group is '
-               'accepting inbound connections from port 22.\n').format(
-                       exc, vm_['name']
+        err = ('Error creating {0} on AWS\n\n'
+               'The following exception was thrown by libcloud when trying to '
+               'run the initial deployment: \n{1}').format(
+                       vm_['name'], exc
                        )
         sys.stderr.write(err)
         return False
+    print('Created node {0}'.format(vm_['name']))
     while not data.public_ips:
         time.sleep(0.5)
         data = get_node(conn, vm_['name'])
@@ -192,40 +206,27 @@ def create(vm_):
     else:
         ip_address = data.public_ips[0]
     if saltcloud.utils.wait_for_ssh(ip_address):
-        fd_, path = tempfile.mkstemp()
-        os.close(fd_)
-        with open(path, 'w+') as fp_:
-            fp_.write(deploy_script.script)
-        cmd = ('scp -oStrictHostKeyChecking=no -i {0} {3} {1}@{2}:/tmp/deploy.sh ').format(
-                       __opts__['AWS.private_key'],
-                       kwargs['ssh_username'],
-                       ip_address,
-                       path,
-                       )
-        if subprocess.call(cmd, shell=True) != 0:
-            time.sleep(15)
-            cmd = ('scp -oStrictHostKeyChecking=no -i {0} {3} {1}@{2}:/tmp/deploy.sh ').format(
-                       __opts__['AWS.private_key'],
-                       'root',
-                       ip_address,
-                       path,
-                       )
-            subprocess.call(cmd, shell=True)
-            cmd = ('ssh -oStrictHostKeyChecking=no -t -i {0} {1}@{2} '
-                   '"sudo bash /tmp/deploy.sh"').format(
-                       __opts__['AWS.private_key'],
-                       'root',
-                       ip_address,
-                       )
-        else:
-            cmd = ('ssh -oStrictHostKeyChecking=no -t -i {0} {1}@{2} '
-                   '"sudo bash /tmp/deploy.sh"').format(
-                       __opts__['AWS.private_key'],
-                       kwargs['ssh_username'],
-                       ip_address,
-                       )
-        subprocess.call(cmd, shell=True)
-        os.remove(path)
+        username = 'ec2-user'
+        for user in usernames:
+            if saltcloud.utils.wait_for_passwd(host=ip_address, username=user, timeout=60, key_filename=__opts__['AWS.private_key']):
+                username = user
+                break
+        kwargs['ssh_username'] = username
+    deploy_command='sudo bash /tmp/deploy.sh'
+    if username == 'root':
+        deploy_command='/tmp/deploy.sh'
+    deployed = saltcloud.utils.deploy_script(
+        host=ip_address,
+        username=username,
+        key_filename=__opts__['AWS.private_key'],
+        deploy_command=deploy_command,
+        tty=True,
+        script=deploy_script.script)
+    if deployed:
+        print('Salt installed on {0}'.format(vm_['name']))
+    else:
+        print('Failed to start Salt on Cloud VM {0}'.format(vm_['name']))
+
     print('Created Cloud VM {0} with the following values:'.format(
         vm_['name']
         ))
