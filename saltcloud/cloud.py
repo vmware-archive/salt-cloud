@@ -110,7 +110,7 @@ class Cloud(object):
                 # The capability to gather images is not supported by this
                 # cloud module
                 continue
-            images[prov] = self.clouds[fun]()
+            images[prov] = self.clouds[fun](None)
         return images
 
     def size_list(self, lookup='all'):
@@ -129,7 +129,7 @@ class Cloud(object):
                 # The capability to gather sizes is not supported by this
                 # cloud module
                 continue
-            sizes[prov] = self.clouds[fun]()
+            sizes[prov] = self.clouds[fun](None)
         return sizes
 
     def create_all(self):
