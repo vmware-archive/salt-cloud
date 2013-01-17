@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 rpm -Uvh --force http://mirrors.kernel.org/fedora-epel/5/x86_64/epel-release-5-4.noarch.rpm
 yum install -y salt-minion

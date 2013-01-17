@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Install the salt-minion package from yum. This is easy for Fedora because
 # Salt packages are in the Fedora package repos
