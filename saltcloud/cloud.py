@@ -303,7 +303,9 @@ class Map(Cloud):
         try:
             with open(self.opts['map'], 'rb') as fp_:
                 map_ = yaml.load(fp_.read())
-        except Exception:
+        except Exception as exc:
+            log.error('Rendering map {0} failed, render error:\n{1}'
+                      .format(self.opts['map'], exc))
             return {}
         if 'include' in map_:
             map_ = salt.config.include_config(map_, self.opts['map'])
