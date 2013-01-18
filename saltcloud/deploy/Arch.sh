@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 echo '[salt]
 Server = http://red45.org/archlinux
