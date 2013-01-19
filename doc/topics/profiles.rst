@@ -14,7 +14,7 @@ yaml configuration. The syntax for declaring profiles is simple:
       script: Fedora
 
 A few key peices of information need to be declared and can change based on the
-public cloud provider. A number of additional paramaters can also be inserted:
+public cloud provider. A number of additional parameters can also be inserted:
 
 .. code-block:: yaml
 
@@ -28,10 +28,28 @@ public cloud provider. A number of additional paramaters can also be inserted:
       grains:
         role: webserver
 
-Some paramaters can be specified in the main Salt cloud config file and then
+Some parameters can be specified in the main Salt cloud config file and then
 are applied to all cloud profiles. For instance if only a single cloud provider
 is being used then the provider option can be declared in the Salt cloud config
 file.
+
+The 'script' option is the name of the bootstrap script that will be executed to turn the new instance into
+a salt minion. If salt-cloud and the salt-minion are located on the same machine, salt-cloud will ensure that
+the key for the new minion is automatically accepted by the master. If 'script: None' is specified, salt-cloud 
+will just boot up the instance and will not run any scripts. The specific `OS: RHEL`, `OS: Ubuntu` design is being
+deprecated in favor of new options that rely on the salt bootstrap script at http://bootstrap.saltstack.org. The new
+style will use the following format ``script: python-bootstrap`` ``script: wget-bootstrap``.
+
+New-Style Bootstrap Script Salt-Cloud 'OS' Options
+--------------------------------------------------
+
+.. code-block:: yaml
+
+    curl-bootstrap-git
+    curl-bootstrap
+    python-bootstrap
+    wget-bootstrap
+    wget-bootstrap-nocert
 
 Larger Example
 --------------
