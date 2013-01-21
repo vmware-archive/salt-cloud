@@ -20,7 +20,7 @@ share/
 # tox - ignore any tox-created virtualenv dirs
 .tox
 
-# ignore the bootstrap file auto-downloaded to /deploy/bootstrap-salt-minion.sh
+# ignore the bootstrap file auto-downloaded to deploy/bootstrap-salt-minion.sh
 bootstrap-salt-minion.sh
 
 # setuptools stuff
