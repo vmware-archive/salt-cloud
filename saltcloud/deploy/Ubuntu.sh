@@ -7,7 +7,9 @@ echo "{{ minion }}" > /etc/salt/minion
 
 apt-get update
 apt-get install -y python-software-properties
-echo | add-apt-repository  ppa:saltstack/salt
+
+# 'echo' simulates pressing [enter]
+echo | add-apt-repository -y ppa:saltstack/salt
 apt-get update
 apt-get install -y salt-minion
 service salt-minion start
