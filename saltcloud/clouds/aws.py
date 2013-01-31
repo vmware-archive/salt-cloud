@@ -252,18 +252,18 @@ def create(vm_):
     ex_securitygroup = securitygroup(vm_)
     if ex_securitygroup:
         kwargs['ex_securitygroup'] = ex_securitygroup
-
-    try:
-        data = conn.create_node(**kwargs)
-    except Exception as exc:
-        err = ('Error creating {0} on AWS\n\n'
-               'The following exception was thrown by libcloud when trying to '
-               'run the initial deployment: \n{1}').format(
-                       vm_['name'], exc
-                       )
-        sys.stderr.write(err)
-        log.error(err)
-        return False
+    while not data:
+      try:
+          data = conn.create_node(**kwargs)
+      except Exception as exc:
+          err = ('Error creating {0} on AWS\n\n'
+                 'The following exception was thrown by libcloud when trying to '
+                 'run the initial deployment: \n{1}').format(
+                         vm_['name'], exc
+                         )
+          sys.stderr.write(err)
+          log.error(err)
+          return False
     log.info('Created node {0}'.format(vm_['name']))
     waiting_for_ip = 0
     while not data.public_ips:
