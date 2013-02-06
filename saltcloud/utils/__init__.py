@@ -467,12 +467,20 @@ def root_cmd(command, tty, sudo, **kwargs):
         log.debug(
             'Using ssh command to simulate tty session, to execute command'
         )
-        cmd = 'ssh -oStrictHostKeyChecking=no -t -i {0} {1}@{2} "{3}"'.format(
-            kwargs['key_filename'],
-            kwargs['username'],
-            kwargs['hostname'],
-            command
-        )
+        if 'key_filename' in kwargs:
+            cmd = 'ssh -oStrictHostKeyChecking=no -t -i {0} {1}@{2} "{3}"'.format(
+                kwargs['key_filename'],
+                kwargs['username'],
+                kwargs['hostname'],
+                command
+            )
+        elif 'password' in kwargs:
+            cmd = 'echo {0} | ssh -oStrictHostKeyChecking=no -t {1}@{2} "{3}"'.format(
+                kwargs['password'],
+                kwargs['username'],
+                kwargs['hostname'],
+                command
+            )
         subprocess.call(cmd, shell=True)
     else:
         log.debug('Using paramiko to execute command')
