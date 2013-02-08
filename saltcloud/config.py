@@ -15,7 +15,7 @@ CLOUD_CONFIG_DEFAULTS = {
     'ssh_auth': '',
     'keysize': 4096,
     'os': '',
-    'script': 'bootstrap-salt-minion',
+    'script': 'wget-bootstrap',
     'start_action': None,
     # Logging defaults
     'log_file': '/var/log/salt/cloud',
