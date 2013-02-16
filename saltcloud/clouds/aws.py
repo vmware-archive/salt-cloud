@@ -9,9 +9,9 @@ set in the main cloud config:
 
 .. code-block:: yaml
 
-    # The AWS API authentication id
+    # AWS Access Key id
     AWS.id: GKTADJGHEIQSXMKKRBJ08H
-    # The AWS API authentication key
+    # AWS Secret Access Key
     AWS.key: askdjghsdfjkghWupUjasdflkdfklgjsdfjajkghs
     # The ssh keyname to use
     AWS.keyname: default
