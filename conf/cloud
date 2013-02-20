@@ -56,7 +56,7 @@
 # The level of messages to send to the log file.
 # One of 'garbage', 'trace', 'debug', info', 'warning', 'error', 'critical'.
 # Default: 'info'
-#log_level_logfile:
+#log_level_logfile: info
 
 #
 # The date and time format used in log messages. Allowed date/time formating
