@@ -51,7 +51,7 @@ def libcloud_version():
     if version < [0, 11, 4]:
         raise ImportError(
             "Your version of libcloud is {0}. salt-cloud requires >= "
-            "libcloud 0.11.4. Please upgrade.".format(libcloud.__version__)
+            "libcloud 0.12.1. Please upgrade.".format(libcloud.__version__)
         )
     return libcloud.__version__
 
