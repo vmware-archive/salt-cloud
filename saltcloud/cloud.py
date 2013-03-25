@@ -173,6 +173,16 @@ class Cloud(object):
             for node in nodes:
                 if node in names:
                     dels[prov].append(node)
+
+        if 'aws' and 'ec2' in dels:
+            # We're supporting both the aws and the ec2 driver, the later
+            # surpasses the first.
+            # If a name is on both providers, remove the one on the aws. We
+            # can't destroy the same machine twice.
+            for name in dels['ec2']:
+                if name in dels['aws']:
+                    dels['aws'].remove(name)
+
         for prov, names_ in dels.items():
             fun = '{0}.destroy'.format(prov)
             for name in names_:
@@ -185,7 +195,9 @@ class Cloud(object):
                             self.opts,
                             self.opts['vm'])
                     if 'append_domain' in minion_dict:
-                        key_id = '.'.join([key_id, minion_dict['append_domain']])
+                        key_id = '.'.join([
+                            key_id, minion_dict['append_domain']
+                        ])
                     saltcloud.utils.remove_key(self.opts['pki_dir'], name)
 
         return ret
