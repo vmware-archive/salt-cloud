@@ -793,7 +793,8 @@ def set_tags(name, tags, call=None, location=None):
         params['Tag.{0}.Key'.format(count)] = tag
         params['Tag.{0}.Value'.format(count)] = tags[tag]
         count += 1
-    result = query(params, setname='tagSet', location=location)
+
+    query(params, setname='tagSet', location=location)
 
     return get_tags(name, call='action', location=location)
 
@@ -840,7 +841,8 @@ def del_tags(name, kwargs, call=None):
     for tag in kwargs['tags'].split(','):
         params['Tag.{0}.Key'.format(count)] = tag
         count += 1
-    result = query(params, setname='tagSet')
+
+    query(params, setname='tagSet')
 
     return get_tags(name, call='action')
 
@@ -858,8 +860,6 @@ def rename(name, kwargs, call=None):
         sys.exit(1)
 
     log.info('Renaming {0} to {1}'.format(name, kwargs['newname']))
-
-    instance_id = _get_node(name)['instanceId']
 
     set_tags(name, {'Name': kwargs['newname']}, call='action')
     saltcloud.utils.rename_key(
