@@ -2,3 +2,6 @@
 salt
 PyYAML
 apache-libcloud
+six
+requests
+python-dateutil
