@@ -5,229 +5,331 @@ Primary interfaces for the salt-cloud system
 # CLI options
 # salt cloud config - /etc/salt/cloud
 # salt master config (for master integration)
-# salt vm config, where vms are defined - /etc/salt/cloud.vm
+# salt VM config, where VMs are defined - /etc/salt/cloud.profiles
 #
 # The cli, master and cloud configs will merge for opts
-# the vm data will be in opts['vm']
+# the VM data will be in opts['vm']
+
 # Import python libs
-import optparse
 import os
-import pprint
+import sys
+import getpass
+import logging
 
 # Import salt libs
 import saltcloud.config
 import saltcloud.output
 import salt.config
 import salt.output
+import salt.utils
+from salt.utils.verify import verify_env, verify_files
 
-from saltcloud.version import __version__ as VERSION
+# Import saltcloud libs
+from saltcloud.utils import parsers
+from saltcloud.libcloudfuncs import libcloud_version
 
-class SaltCloud(object):
-    '''
-    Create a cli SaltCloud object
-    '''
-    def __init__(self):
-        self.opts = self.parse()
 
-    def parse(self):
-        '''
-        Parse the command line and merge the config
-        '''
-        # Grab data from the 4 sources
-        cli = self._parse_cli()
-        cloud = saltcloud.config.cloud_config(cli['cloud_config'])
-        opts = salt.config.master_config(cli['master_config'])
-        vms = saltcloud.config.vm_config(cli['vm_config'])
-        
-        # Load the data in order
-        opts.update(cloud)
-        opts.update(cli)
-        opts['vm'] = vms
-        
-        return opts
+log = logging.getLogger(__name__)
 
-    def _parse_cli(self):
-        '''
-        Parse the cli and return a dict of the options
-        '''
-        parser = optparse.OptionParser()
 
-        parser.add_option(
-                '--version',
-                dest='version',
-                default=False,
-                action='store_true',
-                help='Show program version number and exit')
-
-        parser.add_option('-p',
-                '--profile',
-                dest='profile',
-                default='',
-                help='Specify a profile to use for the vms')
-
-        parser.add_option('-m',
-                '--map',
-                dest='map',
-                default='',
-                help='Specify a cloud map file to use for deployment')
-
-        parser.add_option('-H',
-                '--hard',
-                dest='hard',
-                default=False,
-                action='store_true',
-                help=('Delete all vms that are not defined in the map file '
-                      'CAUTION!!! This operation can irrevocably destroy vms!')
-                )
-
-        parser.add_option('-d',
-                '--destroy',
-                dest='destroy',
-                default=False,
-                action='store_true',
-                help='Specify a vm to destroy')
-
-        parser.add_option('-P',
-                '--parallel',
-                dest='parallel',
-                default=False,
-                action='store_true',
-                help='Build all of the specified virtual machines in parallel')
-
-        parser.add_option('-Q',
-                '--query',
-                dest='query',
-                default=False,
-                action='store_true',
-                help=('Execute a query and return information about the nodes '
-                      'running on configured cloud providers'))
-
-        parser.add_option('--list-images',
-                dest='list_images',
-                default=False,
-                help=('Display a list of images available in configured '
-                      'cloud providers. Pass the cloud provider that '
-                      'available images are desired on, aka "linode", '
-                      'or pass "all" to list images for all configured '
-                      'cloud providers'))
-
-        parser.add_option('--list-sizes',
-                dest='list_sizes',
-                default=False,
-                help=('Display a list of sizes available in configured '
-                      'cloud providers. Pass the cloud provider that '
-                      'available sizes are desired on, aka "AWS", '
-                      'or pass "all" to list sizes for all configured '
-                      'cloud providers'))
-
-        parser.add_option('-C',
-                '--cloud-config',
-                dest='cloud_config',
-                default='/etc/salt/cloud',
-                help='The location of the saltcloud config file')
-
-        parser.add_option('-M',
-                '--master-config',
-                dest='master_config',
-                default='/etc/salt/master',
-                help='The location of the salt master config file')
-
-        parser.add_option('-V',
-                '--profiles',
-                '--vm_config',
-                dest='vm_config',
-                default='/etc/salt/cloud.profiles',
-                help='The location of the saltcloud vm config file')
-
-        parser.add_option('--raw-out',
-                default=False,
-                action='store_true',
-                dest='raw_out',
-                help=('Print the output from the salt command in raw python '
-                      'form, this is suitable for re-reading the output into '
-                      'an executing python script with eval.'))
-
-        parser.add_option('--text-out',
-                default=False,
-                action='store_true',
-                dest='txt_out',
-                help=('Print the output from the salt command in the same '
-                      'form the shell would.'))
-
-        parser.add_option('--yaml-out',
-                default=False,
-                action='store_true',
-                dest='yaml_out',
-                help='Print the output from the salt command in yaml.')
-
-        parser.add_option('--json-out',
-                default=False,
-                action='store_true',
-                dest='json_out',
-                help='Print the output from the salt command in json.')
-
-        parser.add_option('--no-color',
-                default=False,
-                action='store_true',
-                dest='no_color',
-                help='Disable all colored output')
-
-        options, args = parser.parse_args()
-
-        cli = {}
-
-        for k, v in options.__dict__.items():
-            if v is not None:
-                cli[k] = v
-        if args:
-            cli['names'] = args
-
-        return cli
-
+class SaltCloud(parsers.SaltCloudParser):
     def run(self):
         '''
-        Exeute the salt cloud execution run
+        Execute the salt-cloud command line
         '''
-        import salt.log
-        salt.log.setup_logfile_logger(
-            self.opts['log_file'], self.opts['log_level']
-            )
-        for name, level in self.opts['log_granular_levels'].iteritems():
-            salt.log.set_logger_level(name, level)
-        import logging
-        # If statement here for when cloud query is added
+        libcloud_version()
+
+        # Parse shell arguments
+        self.parse_args()
+
+        try:
+            if self.config['verify_env']:
+                verify_env(
+                    [os.path.dirname(self.config['conf_file'])],
+                    getpass.getuser()
+                )
+                logfile = self.config['log_file']
+                if logfile is not None and (
+                        not logfile.startswith('tcp://') or
+                        not logfile.startswith('udp://') or
+                        not logfile.startswith('file://')):
+                    # Logfile is not using Syslog, verify
+                    verify_files([logfile], getpass.getuser())
+        except (IOError, OSError) as err:
+            log.error('Error while verifying the environment: {0}'.format(err))
+            sys.exit(err.errno)
+
+        # Setup log file logging
+        self.setup_logfile_logger()
+
+        if self.options.update_bootstrap:
+            import urllib2
+            url = 'http://bootstrap.saltstack.org'
+            req = urllib2.urlopen(url)
+            if req.getcode() != 200:
+                self.error(
+                    'Failed to download the latest stable version of the '
+                    'bootstrap-salt.sh script from {0}. HTTP error: '
+                    '{1}'.format(
+                        url, req.getcode()
+                    )
+                )
+
+            for entry in self.config.get('deploy_scripts_search_path'):
+                deploy_path = os.path.join(entry, 'bootstrap-salt.sh')
+                try:
+                    print(
+                        'Updating bootstrap-salt.sh.'
+                        '\n\tSource:      {0}'
+                        '\n\tDestination: {1}'.format(
+                            url,
+                            deploy_path
+                        )
+                    )
+                    with salt.utils.fopen(deploy_path, 'w') as fp_:
+                        fp_.write(req.read())
+                    # We were able to update, no need to continue trying to
+                    # write up the search path
+                    self.exit(0)
+                except (OSError, IOError), err:
+                    log.debug(
+                        'Failed to write the updated script: {0}'.format(err)
+                    )
+                    continue
+            self.error('Failed to update the bootstrap script')
+
+        # Late imports so logging works as expected
+        log.info('salt-cloud starting')
         import saltcloud.cloud
-        mapper = saltcloud.cloud.Map(self.opts)
+        mapper = saltcloud.cloud.Map(self.config)
 
-        if self.opts['query']:
-            get_outputter = salt.output.get_outputter
-            if self.opts['raw_out']:
-                printout = get_outputter('raw')
-            elif self.opts['json_out']:
-                printout = get_outputter('json')
-            elif self.opts['txt_out']:
-                printout = get_outputter('txt')
-            elif self.opts['yaml_out']:
-                printout = get_outputter('yaml')
+        ret = {}
+
+        if self.selected_query_option is not None:
+            if self.selected_query_option == 'list_providers':
+                try:
+                    saltcloud.output.double_layer(
+                        mapper.provider_list()
+                    )
+                except Exception as exc:
+                    log.debug(
+                        'There was an error listing providers.', exc_info=True
+                    )
+                    self.error(
+                        'There was an error listing providers: {0}'.format(exc)
+                    )
+                    self.exit(1)
+            if self.config.get('map', None):
+                log.info('Applying map from {0!r}.'.format(self.config['map']))
+                try:
+                    ret = mapper.interpolated_map(
+                        query=self.selected_query_option
+                    )
+                except Exception as exc:
+                    log.debug(
+                        'There was an error with a custom map.', exc_info=True
+                    )
+                    self.error(
+                        'There was an error with a custom map: {0}'.format(
+                            exc
+                        )
+                    )
+                    self.exit(1)
             else:
-                printout = get_outputter(None)
-
-            color = not bool(self.opts['no_color'])
-            printout(mapper.map_providers(), color=color)
-
-        if self.opts['version']:
-            print VERSION
-        if self.opts['list_images']:
-            saltcloud.output.double_layer(
-                    mapper.image_list(self.opts['list_images'])
+                try:
+                    ret = mapper.map_providers(
+                        query=self.selected_query_option
                     )
-        if self.opts['list_sizes']:
-            saltcloud.output.double_layer(
-                    mapper.size_list(self.opts['list_sizes'])
+                except Exception as exc:
+                    log.debug('There was an error with a map.', exc_info=True)
+                    self.error(
+                        'There was an error with a map: {0}'.format(exc)
                     )
-        elif self.opts.get('names') and self.opts['destroy']:
-            mapper.destroy(self.opts.get('names'))
-        elif self.opts.get('names', False) and self.opts['profile']:
-            mapper.run_profile()
-        elif self.opts['map']:
-            mapper.run_map()
+                    self.exit(1)
+
+        elif self.options.list_locations is not None:
+            try:
+                saltcloud.output.double_layer(
+                    mapper.location_list(self.options.list_locations)
+                )
+            except Exception as exc:
+                log.debug(
+                    'There was an error listing locations.', exc_info=True
+                )
+                self.error(
+                    'There was an error listing locations: {0}'.format(exc)
+                )
+                self.exit(1)
+
+        elif self.options.list_images is not None:
+            try:
+                saltcloud.output.double_layer(
+                    mapper.image_list(self.options.list_images)
+                )
+            except Exception as exc:
+                log.debug('There was an error listing images.', exc_info=True)
+                self.error(
+                    'There was an error listing images: {0}'.format(exc)
+                )
+                self.exit(1)
+
+        elif self.options.list_sizes is not None:
+            try:
+                saltcloud.output.double_layer(
+                    mapper.size_list(self.options.list_sizes)
+                )
+            except Exception as exc:
+                log.debug('There was an error listing sizes.', exc_info=True)
+                self.error(
+                    'There was an error listing sizes: {0}'.format(exc)
+                )
+                self.exit(1)
+
+        elif self.options.destroy and (self.config.get('names', None) or
+                                       self.config.get('map', None)):
+            if self.config.get('map', None):
+                log.info('Applying map from {0!r}.'.format(self.config['map']))
+                names = mapper.delete_map(query='list_nodes')
+            else:
+                names = self.config.get('names', None)
+
+            msg = 'The following virtual machines are set to be destroyed:\n'
+            for name in names:
+                msg += '  {0}\n'.format(name)
+
+            try:
+                if self.print_confirm(msg):
+                    ret = mapper.destroy(names)
+            except Exception as exc:
+                log.debug(
+                    'There was an error destroying machines.', exc_info=True
+                )
+                self.error(
+                    'There was an error destroy machines: {0}'.format(exc)
+                )
+                self.exit(1)
+
+        elif self.options.action and (self.config.get('names', None) or
+                                      self.config.get('map', None)):
+            if self.config.get('map', None):
+                log.info('Applying map from {0!r}.'.format(self.config['map']))
+                names = mapper.delete_map(query='list_nodes')
+            else:
+                names = self.config.get('names', None)
+
+            kwargs = {}
+            machines = []
+            msg = (
+                'The following virtual machines are set to be actioned with '
+                '"{0}":\n'.format(
+                    self.options.action
+                )
+            )
+            for name in names:
+                if '=' in name:
+                    # This is obviously not a machine name, treat it as a kwarg
+                    comps = name.split('=')
+                    kwargs[comps[0]] = comps[1]
+                else:
+                    msg += '  {0}\n'.format(name)
+                    machines.append(name)
+            names = machines
+
+            try:
+                if self.print_confirm(msg):
+                    ret = mapper.do_action(names, kwargs)
+            except Exception as exc:
+                log.debug(
+                    'There was a error actioning machines.', exc_info=True
+                )
+                self.error(
+                    'There was an error actioning machines: {0}'.format(exc)
+                )
+                self.exit(1)
+
+        elif self.options.function:
+            prov_func = '{0}.{1}'.format(
+                self.function_name,
+                self.function_provider,
+            )
+            if prov_func not in mapper.clouds:
+                self.error(
+                    'The {0!r} provider does not define the function '
+                    '{1!r}'.format(
+                        self.function_provider, self.function_name
+                    )
+                )
+
+            kwargs = {}
+            for arg in self.args:
+                if '=' in arg:
+                    key, value = arg.split('=')
+                    kwargs[key] = value
+
+            try:
+                ret = mapper.do_function(
+                    self.function_provider, self.function_name, kwargs
+                )
+            except Exception as exc:
+                log.debug(
+                    'There was a error running the function.', exc_info=True
+                )
+                self.error(
+                    'There was an error running the function: {0}'.format(exc)
+                )
+                self.exit(1)
+
+        elif self.options.profile and self.config.get('names', False):
+            try:
+                ret = mapper.run_profile()
+            except Exception as exc:
+                log.debug('There was a profile error.', exc_info=True)
+                self.error('There was a profile error: {0}'.format(exc))
+                self.exit(1)
+
+        elif self.config.get('map', None) and \
+                self.selected_query_option is None:
+            if len(mapper.map) == 0:
+                sys.stderr.write('No nodes defined in this map')
+                self.exit(1)
+            try:
+                dmap = mapper.map_data()
+                if 'destroy' not in dmap and len(dmap['create']) == 0:
+                    sys.stderr.write('All nodes in this map already exist')
+                    self.exit(1)
+
+                log.info('Applying map from {0!r}.'.format(self.config['map']))
+
+                msg = 'The following virtual machines are set to be created:\n'
+                for name in dmap['create']:
+                    msg += '  {0}\n'.format(name)
+                if 'destroy' in dmap:
+                    msg += ('The following virtual machines are set to be '
+                            'destroyed:\n')
+                    for name in dmap['destroy']:
+                        msg += '  {0}\n'.format(name)
+
+                if self.print_confirm(msg):
+                    ret = mapper.run_map(dmap)
+
+                if self.config.get('parallel', False) is False:
+                    log.info('Complete')
+
+            except Exception as exc:
+                log.debug('There was a query error.', exc_info=True)
+                self.error('There was a query error: {0}'.format(exc))
+                self.exit(1)
+
+        # display output using salt's outputter system
+        salt.output.display_output(ret, self.options.output, self.config)
+        self.exit(0)
+
+    def print_confirm(self, msg):
+        if self.options.assume_yes:
+            return True
+        print(msg)
+        res = raw_input('Proceed? [N/y] ')
+        if not res.lower().startswith('y'):
+            return False
+        print('... proceeding')
+        return True
