@@ -1051,7 +1051,7 @@ def _list_nodes_full(location=None):
     return ret
 
 
-def list_nodes():
+def list_nodes(call=None):
     '''
     Return a list of the VMs that are on the provider
     '''

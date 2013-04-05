@@ -186,7 +186,7 @@ class Cloud(object):
                             self.opts['vm'])
                     if minion_dict and 'append_domain' in minion_dict:
                         key_id = '.'.join([key_id, minion_dict['append_domain']])
-                    saltcloud.utils.remove_key(self.opts['pki_dir'], name)
+                    saltcloud.utils.remove_key(self.opts['pki_dir'], key_id)
 
         return ret
 
@@ -262,7 +262,7 @@ class Cloud(object):
 
         key_id = vm_['name']
         minion_dict = saltcloud.utils.get_option('minion', self.opts, vm_)
-        if 'append_domain' in minion_dict:
+        if minion_dict and 'append_domain' in minion_dict:
             key_id = '.'.join([key_id, minion_dict['append_domain']])
         saltcloud.utils.accept_key(self.opts['pki_dir'], pub, key_id)
 

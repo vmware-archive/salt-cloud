@@ -249,8 +249,8 @@ class SaltCloud(parsers.SaltCloudParser):
 
         elif self.options.function:
             prov_func = '{0}.{1}'.format(
-                self.function_name,
                 self.function_provider,
+                self.function_name
             )
             if prov_func not in mapper.clouds:
                 self.error(
@@ -268,7 +268,7 @@ class SaltCloud(parsers.SaltCloudParser):
 
             try:
                 ret = mapper.do_function(
-                    self.function_provider, self.function_name, kwargs
+                    self.function_name, self.function_provider, kwargs
                 )
             except Exception as exc:
                 log.debug(
@@ -279,7 +279,10 @@ class SaltCloud(parsers.SaltCloudParser):
                 )
                 self.exit(1)
 
-        elif self.options.profile and self.config.get('names', False):
+        elif self.options.profile:
+            if not self.config.get('names'):
+                self.error('Please supply the names for the instances to be created!')
+                self.exit(1)
             try:
                 ret = mapper.run_profile()
             except Exception as exc:
