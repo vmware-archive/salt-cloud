@@ -224,8 +224,8 @@ class SaltCloud(parsers.SaltCloudParser):
             )
             if prov_func not in mapper.clouds:
                 self.error(
-                    'The {0!r} provider does not define the function '
-                    '{1!r}'.format(
+                    'The {1!r} provider does not define the function '
+                    '{0!r}'.format(
                         self.function_provider, self.function_name
                     )
                 )
