@@ -321,6 +321,8 @@ def ssh_interface(vm_):
 
 
 
+
+
 def get_location(vm_=None):
     '''
     Return the joyent datacenter to use, in this order:
@@ -353,16 +355,14 @@ def avail_locations():
 
     return ret
 
-def has_method(obj, method_name):
-    ret = dir( obj )
+def __query_request(conn,function):
+    data = {}
+    if conn is None:
+        conn = get_conn(get_location())
+    if not conn_has_method(conn, function):
+        return data
+    data = getattr(conn, function)()
+    return data
 
-    if method_name in dir(obj):
-        return True;
-
-    log.error(
-            "Method '{0}' not yet supported!".format(
-                method_name
-            )
-    )
-    return False;
-
+def list_ssh_keys(conn=None,call=None):
+    return __query_request(conn,'sc_list_ssh_keys');

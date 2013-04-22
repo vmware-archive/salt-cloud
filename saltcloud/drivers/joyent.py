@@ -94,21 +94,21 @@ class ExtendedJoyentNodeDriver(JoyentNodeDriver):
         return self.__delete_request('/my/machines/%s/tags' % (node.id))
 
     def sc_describe_analytics(self):
-        return self.__get_request('/my/machines/analytics')
+        return self.__get_request('/my/analytics')
 
     def sc_list_instrumenations(self):
-        return self.__get_request('/my/machines/analytics/instrumentations')
+        return self.__get_request('/my/analytics/instrumentations')
 
     def sc_get_instrumentation(self,id):
-        return self.__get_request("/my/machines/analytics/instrumentations/{0}".format(id))
+        return self.__get_request("/my/analytics/instrumentations/{0}".format(id))
 
     def sc_get_instrumentationValue(self,id):
         return self.__get_request(
-                "/my/machines/analytics/instrumentations/{0}/value/raw".format(id))
+                "/my/analytics/instrumentations/{0}/value/raw".format(id))
 
     def sc_get_instrumentationHeatmap(self,id):
         return self.__get_request(
-                "/my/machines/analytics/instrumentations/{0}/value/heatmap/image".format(id))
+                "/my/analytics/instrumentations/{0}/value/heatmap/image".format(id))
 
     def sc_get_instrumentationHeatmapDetails(self,id):
         return self.__get_request(
@@ -117,28 +117,28 @@ class ExtendedJoyentNodeDriver(JoyentNodeDriver):
     def sc_create_instrumentation(self,kvps):
         data = urllib.urlencode(kvps)
         return self.__post_request(
-                "/my/machines/analytics/instrumentations".format(id), 
+                "/my/analytics/instrumentations".format(id), 
                 data)
 
     def sc_del_instrumentation(self,id):
-        return self.__delete_request('/my/machines/instrumentations/{0}'.format(node.id))
+        return self.__delete_request('/my/analytics/instrumentations/{0}'.format(node.id))
 
     def sc_list_ssh_keys(self):
-        return self.__get_request("/my/machines/keys")
+        return self.__get_request("/my/keys")
 
     def sc_get_key(self,keyname):
-        return self.__get_request("/my/machines/%s" % keyname )
+        return self.__get_request("/my/keys/%s" % keyname )
 
     def sc_create_key(self,keyname,key):
         data = json.dumps({'name': keyname, 'key':key })
-        return self.__post_request("/my/machines/keys", data)
+        return self.__post_request("/my/keys", data)
 
     def sc_delete_key(self,keyname):
-        return self.__delete_request("/my/machines/keys/%s" % keyname)
+        return self.__delete_request("/my/keys/%s" % keyname)
 
     def sc_list_datacenters(self):
-        return self.__get_request("/my/machines/datacenters")
+        return self.__get_request("/my/datacenters")
 
     def sc_get_datacenter(self,dc):
-        return self.__get_request("/my/machines/datacenters/%s" % dc)
+        return self.__get_request("/my/datacenters/%s" % dc)
 
