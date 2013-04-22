@@ -119,7 +119,6 @@ class ExtendedJoyentNodeDriver(JoyentNodeDriver):
         return self.__post_request(
                 "/my/machines/analytics/instrumentations".format(id), 
                 data)
-        return result.status == httplib.ACCEPTED
 
     def sc_del_instrumentation(self,id):
         return self.__delete_request('/my/machines/instrumentations/{0}'.format(node.id))
