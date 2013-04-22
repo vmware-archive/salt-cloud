@@ -218,15 +218,22 @@ class SaltCloud(parsers.SaltCloudParser):
                 self.handle_exception(msg, exc)
 
         elif self.options.function:
+            try:
+                if self.function_provider in  self.config['providers']:
+                    self.function_provider = self.config['providers'][self.function_provider][0]['provider']
+            except:
+                pass
+
             prov_func = '{0}.{1}'.format(
-                self.function_name,
                 self.function_provider,
+                self.function_name,
             )
             if prov_func not in mapper.clouds:
                 self.error(
-                    'The {1!r} provider does not define the function '
-                    '{0!r}'.format(
-                        self.function_provider, self.function_name
+                    'The {0!r} provider does not define the function '
+                    '{1!r}'.format(
+                        self.function_provider, 
+                        self.function_name,
                     )
                 )
 
@@ -238,7 +245,7 @@ class SaltCloud(parsers.SaltCloudParser):
 
             try:
                 ret = mapper.do_function(
-                    self.function_provider, self.function_name, kwargs
+                    self.function_name, self.function_provider, kwargs
                 )
             except (SaltCloudException, Exception) as exc:
                 msg = 'There was an error running the function: {0}'

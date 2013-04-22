@@ -272,7 +272,6 @@ def start(name, call=None):
     '''
     return __take_action(name,call,'sc_start_node','Started','start')
 
-    
 def __take_action(name, call=None, action = None, atext= None, btext=None):
     data = {}
 
@@ -319,10 +318,6 @@ def ssh_interface(vm_):
         search_global=False
     )
 
-
-
-
-
 def get_location(vm_=None):
     '''
     Return the joyent datacenter to use, in this order:
@@ -355,14 +350,20 @@ def avail_locations():
 
     return ret
 
-def __query_request(conn,function):
+def __execute_function(call=None, function=None, params={}):
+    if call != 'function':
+        raise SaltCloudSystemExit(
+            'This function must be called with -f or --function.'
+            )
     data = {}
-    if conn is None:
-        conn = get_conn(get_location())
+    conn = get_conn(get_location())
     if not conn_has_method(conn, function):
         return data
     data = getattr(conn, function)()
     return data
 
-def list_ssh_keys(conn=None,call=None):
-    return __query_request(conn,'sc_list_ssh_keys');
+
+
+def list_ssh_keys(kwargs={}, call=None):
+    return __execute_function(call,'sc_list_ssh_keys');
+

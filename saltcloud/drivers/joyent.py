@@ -6,6 +6,7 @@
 # import libcloud common libraries/methods
 from saltcloud.libcloudfuncs import *
 import urllib
+from pprint import pprint
 
 # import joyent sepcific driver classes
 from libcloud.compute.drivers.joyent import (
@@ -13,6 +14,7 @@ from libcloud.compute.drivers.joyent import (
     JoyentConnection,
     JoyentResponse
     )
+
 
 
 class ExtendedJoyentNodeDriver(JoyentNodeDriver):
@@ -28,9 +30,12 @@ class ExtendedJoyentNodeDriver(JoyentNodeDriver):
         result = self.connection.request(url,data=data,method='POST') 
         return result.status == httplib.ACCEPTED
 
-    def __get_request(self,url):
+    def __get_request(self,url, dataHandler=None):
         result = self.connection.request(url,method='GET') 
-        return result.status == httplib.ACCEPTED
+        if result.status == httplib.OK:
+            return json.loads(result.body)
+        return result.status == httplib.OK
+
 
     def __delete_request(self,url):
         result = self.connection.request(url,method='DELETE') 

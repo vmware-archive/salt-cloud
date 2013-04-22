@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # vim: sw=4 ts=4 fenc=utf-8
 """
-    :copyright: © 2012 UfSoft.org - :email:`Pedro Algarvio (pedro@algarvio.me)`
+    :copyright: ÃÂÃÂ© 2012 UfSoft.org - :email:`Pedro Algarvio (pedro@algarvio.me)`
     :license: Apache 2.0, see LICENSE for more details
 """
 
@@ -278,7 +278,7 @@ class ExecutionOptionsMixIn(object):
 
     def process_function(self):
         if self.options.function:
-            self.function_provider, self.function_name = self.options.function
+            self.function_name , self.function_provider = self.options.function
             if self.function_name.startswith('-') or '=' in self.function_name:
                 self.error(
                     '--function expects two arguments: <provider> '
