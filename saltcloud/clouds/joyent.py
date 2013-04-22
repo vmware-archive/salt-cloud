@@ -48,6 +48,7 @@ import saltcloud.utils
 import saltcloud.config as config
 from saltcloud.utils import namespaced_function
 
+
 # Get logging started
 log = logging.getLogger(__name__)
 
@@ -106,7 +107,7 @@ def get_conn(location=DEFAULT_LOCATION):
     '''
     Return a conn object for the passed VM data
     '''
-    driver = get_driver(Provider.JOYENT)
+    driver = get_extended_driver(Provider.JOYENT)
 
     log.debug("Loading driver for connection to {0}".format(location))
 
@@ -247,7 +248,7 @@ def reboot(name, call=None):
 
         salt-cloud -a reboot mymachine
     '''
-    return __take_action(name, call, 'reboot_node','Rebooting','reboot')
+    return __take_action(name, call, 'reboot_node','Rebooted','reboot')
 
 
 def stop(name, call=None):
@@ -269,7 +270,7 @@ def start(name, call=None):
 
         salt-cloud -a stop mymachine
     '''
-    return __take_action(name,call,'start_node','Started','start')
+    return __take_action(name,call,'sc_start_node','Started','start')
 
     
 def __take_action(name, call=None, action = None, atext= None, btext=None):
