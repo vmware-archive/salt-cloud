@@ -99,6 +99,7 @@ Using the new syntax:
 # Import python libs
 import time
 import logging
+import pprint
 import socket
 import pprint
 
