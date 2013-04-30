@@ -141,6 +141,7 @@ setup(name=NAME,
       packages=['saltcloud',
                 'saltcloud/utils',
                 'saltcloud/clouds',
+                'saltcloud/drivers',
                 ],
       package_data={
           'saltcloud': ['deploy/*.sh'],

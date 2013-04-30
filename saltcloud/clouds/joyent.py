@@ -48,6 +48,7 @@ import saltcloud.utils
 import saltcloud.config as config
 from saltcloud.utils import namespaced_function
 
+
 # Get logging started
 log = logging.getLogger(__name__)
 
@@ -106,7 +107,7 @@ def get_conn(location=DEFAULT_LOCATION):
     '''
     Return a conn object for the passed VM data
     '''
-    driver = get_driver(Provider.JOYENT)
+    driver = get_extended_driver(Provider.JOYENT)
 
     log.debug("Loading driver for connection to {0}".format(location))
 
@@ -247,7 +248,7 @@ def reboot(name, call=None):
 
         salt-cloud -a reboot mymachine
     '''
-    return __take_action(name, call, 'reboot_node','Rebooting','reboot')
+    return __take_action(name, call, 'reboot_node','Rebooted','reboot')
 
 
 def stop(name, call=None):
@@ -269,9 +270,8 @@ def start(name, call=None):
 
         salt-cloud -a stop mymachine
     '''
-    return __take_action(name,call,'start_node','Started','start')
+    return __take_action(name,call,'sc_start_node','Started','start')
 
-    
 def __take_action(name, call=None, action = None, atext= None, btext=None):
     data = {}
 
@@ -318,8 +318,6 @@ def ssh_interface(vm_):
         search_global=False
     )
 
-
-
 def get_location(vm_=None):
     '''
     Return the joyent datacenter to use, in this order:
@@ -352,16 +350,20 @@ def avail_locations():
 
     return ret
 
-def has_method(obj, method_name):
-    ret = dir( obj )
-
-    if method_name in dir(obj):
-        return True;
-
-    log.error(
-            "Method '{0}' not yet supported!".format(
-                method_name
+def __execute_function(call=None, function=None, params={}):
+    if call != 'function':
+        raise SaltCloudSystemExit(
+            'This function must be called with -f or --function.'
             )
-    )
-    return False;
+    data = {}
+    conn = get_conn(get_location())
+    if not conn_has_method(conn, function):
+        return data
+    data = getattr(conn, function)()
+    return data
+
+
+
+def list_ssh_keys(kwargs={}, call=None):
+    return __execute_function(call,'sc_list_ssh_keys');
 

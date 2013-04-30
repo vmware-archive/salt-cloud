@@ -7,7 +7,15 @@ cloud virtual machines
 import os
 import logging
 
+## import json libs (required for extending libcloud drivers)
+try:
+    import simplejson as json
+except:
+    import json
+
 # Import libcloud
+from libcloud.utils.py3 import httplib
+
 from libcloud.compute.types import Provider
 from libcloud.compute.providers import get_driver
 from libcloud.compute.deployment import (
@@ -327,3 +335,35 @@ def conn_has_method(conn, method_name):
     )
     return False;
 
+
+EXTENDED_DRIVERS = {
+    Provider.JOYENT:
+        ('saltcloud.drivers.joyent', 'ExtendedJoyentNodeDriver'),
+    Provider.LINODE:
+        ('saltcloud.drivers.linode', 'ExtendedLinodeNodeDriver'),
+    Provider.RACKSPACE:
+        ('saltcloud.drivers.rackspace', 'ExtendedRackspaceNodeDriver'),
+    Provider.OPENSTACK:
+        ('saltcloud.drivers.openstack', 'ExtendedOpenStackNodeDriver'),
+    }
+
+def get_extended_driver(provider):
+    if provider in EXTENDED_DRIVERS:
+        return _get_extended_provider_driver(EXTENDED_DRIVERS, provider)
+    else:
+        return get_driver(provider)
+
+def _get_extended_provider_driver(drivers, provider):
+    """
+    Get an extended driver.
+
+    @param drivers: Dictionary containing valid providers.
+    @param provider: Id of provider to get driver
+    @type provider: L{libcloud.types.Provider}
+    """
+    if provider in drivers:
+        mod_name, driver_name = drivers[provider]
+        _mod = __import__(mod_name, globals(), locals(), [driver_name])
+        return getattr(_mod, driver_name)
+
+    raise AttributeError('Provider %s does not exist' % (provider))
