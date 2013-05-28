@@ -657,6 +657,13 @@ class Cloud(object):
 
         return output
 
+    def get_profile_vm(self, profile):
+        for vm_ in self.opts['vm']:
+            if vm_['profile'] != profile:
+                continue
+            return vm_
+        return None
+
     def profile_provider(self, profile=None):
         for definition in self.opts['vm']:
             if definition['profile'] != profile:
@@ -849,8 +856,17 @@ class Map(Cloud):
         full_map = {}
         dmap = self.read()
         for profile, vmap in dmap.items():
-            provider = self.profile_provider(profile)
-            if provider is None:
+            vm_ = self.get_profile_vm(profile)
+            if vm_ is None:
+                log.info(
+                    'No profile details was found by the name {0!r}.'.format(
+                        profile
+                    )
+                )
+                continue
+
+            provider_alias = vm_['provider']
+            if provider_alias is None:
                 log.info(
                     'No provider for the mapped {0!r} profile was '
                     'found.'.format(
@@ -858,22 +874,24 @@ class Map(Cloud):
                     )
                 )
                 continue
-            for vm in [vm.get('name') for vm in vmap]:
-                if provider not in full_map:
-                    full_map[provider] = {}
 
-                if vm in query_map[provider]:
-                    full_map[provider][vm] = query_map[provider][vm]
-                else:
-                    full_map[provider][vm] = 'Absent'
+            provider_driver = self.build_lookup(provider_alias)[provider_alias]
+            full_provider_mapping = '{0}:{1}'.format(
+                provider_alias, provider_driver[0]
+            )
+            mapped_vms = query_map[provider_alias][provider_driver[0]]
+            for vm_name in [vm.get('name') for vm in vmap]:
+                if full_provider_mapping not in full_map:
+                    full_map[full_provider_mapping] = {}
+                full_map[full_provider_mapping][vm_name] = mapped_vms.get(
+                    vm_name, 'Absent'
+                )
         return full_map
 
     def delete_map(self, query=None):
-        query_map = self.interpolated_map(query=query)
         names = []
-        for profile in query_map:
-            for vm in query_map[profile]:
-                names.append(vm)
+        for provider, vms in self.interpolated_map(query=query).iteritems():
+            names.extend(vms.keys())
         return names
 
     def read(self):
