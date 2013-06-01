@@ -1298,7 +1298,6 @@ def _extract_name_tag(item):
             for tag in tagset['item']:
                 if tag['key'] == 'Name':
                     return tag['value']
-        return (item['tagSet']['item']['value'])
     return item['instanceId']
 
 
