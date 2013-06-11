@@ -175,7 +175,7 @@ def get_configured_provider():
     '''
     return config.is_provider_configured(
         __opts__,
-        'ec2',
+        __active_profile_name__ or 'ec2',
         ('id', 'key', 'keyname', 'private_key')
     )
 
@@ -728,7 +728,7 @@ def create(vm_=None, call=None):
             # Show the traceback if the debug logging level is enabled
             exc_info=log.isEnabledFor(logging.DEBUG)
         )
-        return False
+        raise
 
     instance_id = data[0]['instanceId']
 

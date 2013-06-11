@@ -229,7 +229,23 @@ def apply_vm_profiles_config(overrides, defaults=None):
         # Update the profile's entry with the extended data
         vms[profile] = extended
 
-    return vms.values()
+    # Return a provider -> profiles mapping
+    nvms = {}
+    for profile, details in vms.iteritems():
+        provider_alias = details.get('provider')
+        if ':' not in provider_alias:
+            if provider_alias not in nvms:
+                nvms[provider_alias] = {}
+            nvms[provider_alias][profile] = details
+            continue
+
+        alias, provider = provider_alias.split(':')
+        if alias not in nvms:
+            nvms[alias] = {provider: {}}
+        if provider not in nvms[alias]:
+            nvms[alias][provider] = {}
+        nvms[alias][provider][profile] = details
+    return nvms
 
 
 def cloud_providers_config(path,
@@ -312,6 +328,10 @@ def apply_cloud_providers_config(overrides, defaults=None):
                         'section named, \'production\', you can only have a '
                         'single entry for EC2, Joyent, Openstack, and so '
                         'forth.'
+                    )
+                    raise saltcloud.exceptions.SaltCloudConfigError(
+                        'The cloud provider alias {0!r} has multiple entries '
+                        'for the {1[provider]!r} driver.'.format(key, details)
                     )
                 handled_providers.add(
                     details['provider']
@@ -423,7 +443,7 @@ def get_config_value(name, vm_, opts, default=None, search_global=True):
             # WARN the user!!!!
             log.error(
                 'The {0!r} cloud provider definition has more than one '
-                'entries. Your VM configuration should be specifying the '
+                'entry. Your VM configuration should be specifying the '
                 'provider as \'provider: {0}:<provider-engine>\'. Since '
                 'it\'s not, we\'re returning the first definition which '
                 'might not be what you intended.'.format(
@@ -454,6 +474,55 @@ def is_provider_configured(opts, provider, required_keys=()):
     Check and return the first matching and fully configured cloud provider
     configuration.
     '''
+
+    # Are we being passed the profile name? Not the driver? <alias>:<driver>?
+    if ':' in provider:
+        # we're being passed <alias>:<provider>
+        alias, lprovider = provider.split(':')
+
+        if lprovider in opts['providers']:
+
+            for provider_details in opts['providers'][alias]:
+                if provider_details['provider'] != lprovider:
+                    continue
+
+                # If we reached this far, we have a matching provider, let's
+                # see if all required configuration keys are present and not
+                # None
+                skip_provider = False
+                for key in required_keys:
+                    if provider_details.get(key, None) is None:
+                        # This provider does not include all necessary keys,
+                        # continue to next one
+                        skip_provider = True
+                        break
+
+                if skip_provider:
+                    continue
+
+                # If we reached this far, the provider included all required
+                # keys
+                return provider_details
+
+    if provider in opts['providers']:
+        # We're being passed the provider alias and no :<provider>
+        # This will only work if an alias only defines one driver
+        providers = opts['providers'][provider]
+        if len(providers) > 1:
+            raise saltcloud.exceptions.SaltCloudConfigError(
+                'Specifying just {0!r} is not enough since it has settings '
+                'for multiple drivers: {1}'.format(
+                    provider,
+                    ', '.join(
+                        '{0[provider]!r}'.format(driver)
+                        for driver in providers
+                    )
+                )
+            )
+        # There's only a single driver configured, return it
+        return providers[0]
+
+    # We're most likely being passed a driver name
     for provider_details_list in opts['providers'].values():
         for provider_details in provider_details_list:
             if 'provider' not in provider_details:

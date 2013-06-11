@@ -8,7 +8,6 @@ import glob
 import time
 import signal
 import logging
-import tempfile
 import multiprocessing
 
 # Import saltcloud libs
@@ -88,7 +87,7 @@ class Cloud(object):
         return provs
 
     def get_configured_providers(self):
-        providers = set()
+        providers = {}
         for alias, entries in self.opts['providers'].iteritems():
             for entry in entries:
                 provider = entry.get('provider', None)
@@ -100,19 +99,14 @@ class Cloud(object):
                         )
                     )
                     continue
-                if provider is not None and alias not in providers:
-                    providers.add(alias)
+                if provider is not None and \
+                        provider not in providers.get(alias, []):
+                    providers.setdefault(alias, []).append(provider)
         return providers
 
     def build_lookup(self, lookup):
         if lookup == 'all':
-            providers = []
-            for alias, entries in self.opts['providers'].iteritems():
-                for entry in entries:
-                    provider = entry.get('provider', None)
-                    if provider is not None and provider not in providers:
-                        providers.append(provider)
-
+            providers = self.get_configured_providers()
             if not providers:
                 raise SaltCloudSystemExit(
                     'There are no cloud providers configured.'
@@ -131,7 +125,7 @@ class Cloud(object):
 
             for entry in self.opts['providers'].get(alias):
                 if entry.get('provider', None) == provider:
-                    return [provider]
+                    return {alias: [provider]}
 
             raise SaltCloudSystemExit(
                 'No cloud providers matched {0!r}. Available: {1}'.format(
@@ -139,11 +133,20 @@ class Cloud(object):
                 )
             )
 
-        providers = [
-            d.get('provider', None) for d in
-            self.opts['providers'].get(lookup, [{}])
-            if d and d.get('provider', None) is not None
-        ]
+        providers = {}
+        for alias, providers_ in self.get_configured_providers().iteritems():
+            if alias in providers:
+                continue
+
+            if alias == lookup:
+                # We matched the alias. Add all defined drivers
+                providers[alias] = providers_
+                continue
+
+            if lookup in providers_:
+                # We matched the driver, add it
+                providers[alias] = [lookup]
+
         if not providers:
             raise SaltCloudSystemExit(
                 'No cloud providers matched {0!r}. '
@@ -153,29 +156,76 @@ class Cloud(object):
             )
         return providers
 
+    def get_matching_provider(self, provider):
+        '''
+        This function will parse the passed provider alias and return the
+        actual cloud driver provider.
+
+        If more than one cloud provider is found under the same alias, thrown
+        an error.
+        '''
+        providers = self.build_lookup(provider)
+
+        if len(providers) > 1:
+            raise SaltCloudSystemExit(
+                'More than one cloud provider alias was matched using {0!r} '
+                'as a lookup query. You need to specify one of: {1}.'.format(
+                    provider,
+                    ', '.join(providers),
+                )
+            )
+
+        for provider in providers:
+            if len(providers[provider]) > 1:
+                raise SaltCloudSystemExit(
+                    'More than one cloud provider({0}) is defined under the '
+                    'same alias({1}). You need to specify one of: {2}'.format(
+                        ', '.join(providers[provider]),
+                        provider,
+                        ', '.join([
+                            '\'{0}:{1}\''.format(provider, d) for d in
+                            providers[provider]
+                        ])
+                    )
+                )
+            return providers[provider][0]
+
     def map_providers(self, query='list_nodes'):
         '''
         Return a mapping of what named VMs are running on what VM providers
         based on what providers are defined in the configuration and VMs
         '''
-        provs = self.get_providers()
-        pmap = {}
-        for prov in provs:
-            fun = '{0}.{1}'.format(prov, query)
-            if fun not in self.clouds:
-                log.error(
-                    'Public cloud provider {0} is not available'.format(
-                        prov
+        providers_map = {}
+        for alias, drivers in self.get_configured_providers().iteritems():
+            if alias not in providers_map:
+                providers_map[alias] = {}
+
+            for driver in drivers:
+                fun = '{0}.{1}'.format(driver, query)
+
+                if not fun in self.clouds:
+                    log.error(
+                        'Public cloud provider {0!r} defined under the {1!r} '
+                        'alias is not available'.format(driver, alias)
                     )
-                )
-                continue
-            try:
-                pmap[prov] = self.clouds[fun]()
-            except Exception:
-                # Failed to communicate with the provider, don't list any
-                # nodes
-                pmap[prov] = []
-        return pmap
+                    continue
+
+                try:
+                    with saltcloud.utils.CloudProviderContext(
+                            self.clouds[fun], driver):
+                        providers_map[alias][driver] = self.clouds[fun]()
+                except Exception as err:
+                    log.error(
+                        'Failed to get the output of \'{0}()\': {1}'.format(
+                            fun, err,
+                        ),
+                        # Show the traceback if the debug logging level is
+                        # enabled
+                        exc_info=log.isEnabledFor(logging.DEBUG)
+                    )
+                    providers_map[alias][driver] = []
+
+        return providers_map
 
     def map_providers_parallel(self, query='list_nodes'):
         '''
@@ -184,28 +234,31 @@ class Cloud(object):
 
         Same as map_providers but query in parallel.
         '''
-        providers = self.get_providers()
-
         opts = self.opts.copy()
         multiprocessing_data = []
-        for provider in providers:
-            fun = '{0}.{1}'.format(provider, query)
-            if fun not in self.clouds:
-                log.error(
-                    'Public cloud provider {0} is not available'.format(
-                        provider
+        providers_map = {}
+        for alias, drivers in self.get_configured_providers().iteritems():
+            if alias not in providers_map:
+                providers_map[alias] = {}
+
+            for driver in drivers:
+                fun = '{0}.{1}'.format(driver, query)
+
+                if not fun in self.clouds:
+                    log.error(
+                        'Public cloud provider {0!r} defined under the {1!r} '
+                        'alias is not available'.format(driver, alias)
                     )
-                )
-                continue
-            multiprocessing_data.append({
-                'fun': fun,
-                'opts': opts,
-                'query': query,
-                'provider': provider
-            })
+                    continue
+                multiprocessing_data.append({
+                    'fun': fun,
+                    'opts': opts,
+                    'alias': alias,
+                    'driver': driver,
+                })
 
         output = {}
-        providers_count = len(providers)
+        providers_count = len(multiprocessing_data)
         pool = multiprocessing.Pool(
             providers_count < 10 and providers_count or 10,
             init_pool_worker
@@ -224,127 +277,146 @@ class Cloud(object):
             pool.close()
             pool.join()
 
-        for obj in parallel_pmap:
-            output.update(obj)
+        for alias, driver, ret in parallel_pmap:
+            if alias not in output:
+                output[alias] = {}
+            if driver not in output[alias]:
+                output[alias][driver] = {}
+            output[alias][driver].update(ret)
         return output
 
     def location_list(self, lookup='all'):
         '''
         Return a mapping of all location data for available providers
         '''
-
-        provs = self.get_providers()
-        locations = {}
-
+        ret = {}
         lookups = self.build_lookup(lookup)
         if not lookups:
-            return locations
+            return ret
 
-        for prov in provs:
-            # If all providers are not desired, then don't get them
-            if prov not in lookups:
-                continue
+        for alias, drivers in lookups.iteritems():
 
-            fun = '{0}.avail_locations'.format(prov)
-            if fun not in self.clouds:
-                # The capability to gather locations is not supported by this
-                # cloud module
-                continue
-            try:
-                locations[prov] = self.clouds[fun]()
-            except Exception as err:
-                log.error(
-                    'Failed to get the output of \'{0}()\': {1}'.format(
-                        fun, err,
-                    ),
-                    # Show the traceback if the debug logging level is enabled
-                    exc_info=log.isEnabledFor(logging.DEBUG)
-                )
-        return locations
+            for driver in drivers:
+                fun = '{0}.avail_locations'.format(driver)
+                if not fun in self.clouds:
+                    # The capability to gather locations is not supported by
+                    # this cloud module
+                    log.debug(
+                        'The {0!r} cloud provider defined under {1!r} is '
+                        'unable to get the locations information'.format(
+                            driver, alias
+                        )
+                    )
+                    continue
+
+                try:
+                    mapping = '{0}:{1}'.format(alias, driver)
+                    with saltcloud.utils.CloudProviderContext(
+                            self.clouds[fun], driver):
+                        ret[mapping] = self.clouds[fun]()
+                except Exception as err:
+                    log.error(
+                        'Failed to get the output of \'{0}()\': {1}'.format(
+                            fun, err,
+                        ),
+                        # Show the traceback if the debug logging level is
+                        # enabled
+                        exc_info=log.isEnabledFor(logging.DEBUG)
+                    )
+        return ret
 
     def image_list(self, lookup='all'):
         '''
         Return a mapping of all image data for available providers
         '''
-        provs = self.get_providers()
-        images = {}
-
+        ret = {}
         lookups = self.build_lookup(lookup)
         if not lookups:
-            return images
+            return ret
 
-        for prov in provs:
-            # If all providers are not desired, then don't get them
-            if prov not in lookups:
-                continue
+        for alias, drivers in lookups.iteritems():
 
-            fun = '{0}.avail_images'.format(prov)
-            if not fun in self.clouds:
-                # The capability to gather images is not supported by this
-                # cloud module
-                continue
-            try:
-                images[prov] = self.clouds[fun]()
-            except Exception as err:
-                log.error(
-                    'Failed to get the output of \'{0}()\': {1}'.format(
-                        fun, err,
-                    ),
-                    # Show the traceback if the debug logging level is enabled
-                    exc_info=log.isEnabledFor(logging.DEBUG)
-                )
-        return images
+            for driver in drivers:
+                fun = '{0}.avail_images'.format(driver)
+                if not fun in self.clouds:
+                    # The capability to gather images is not supported by this
+                    # cloud module
+                    log.debug(
+                        'The {0!r} cloud provider defined under {1!r} is '
+                        'unable to get the images information'.format(
+                            driver, alias
+                        )
+                    )
+                    continue
+
+                try:
+                    mapping = '{0}:{1}'.format(alias, driver)
+                    with saltcloud.utils.CloudProviderContext(
+                            self.clouds[fun], driver):
+                        ret[mapping] = self.clouds[fun]()
+                except Exception as err:
+                    log.error(
+                        'Failed to get the output of \'{0}()\': {1}'.format(
+                            fun, err,
+                        ),
+                        # Show the traceback if the debug logging level is
+                        # enabled
+                        exc_info=log.isEnabledFor(logging.DEBUG)
+                    )
+        return ret
 
     def size_list(self, lookup='all'):
         '''
         Return a mapping of all image data for available providers
         '''
-        provs = self.get_providers()
-        sizes = {}
-
+        ret = {}
         lookups = self.build_lookup(lookup)
         if not lookups:
-            return sizes
+            return ret
 
-        for prov in provs:
-            # If all providers are not desired, then don't get them
-            if prov not in lookups:
-                continue
+        for alias, drivers in lookups.iteritems():
 
-            fun = '{0}.avail_sizes'.format(prov)
-            if not fun in self.clouds:
-                # The capability to gather sizes is not supported by this
-                # cloud module
-                continue
-            try:
-                sizes[prov] = self.clouds[fun]()
-            except Exception as err:
-                log.error(
-                    'Failed to get the output of \'{0}()\': {1}'.format(
-                        fun, err,
-                    ),
-                    # Show the traceback if the debug logging level is enabled
-                    exc_info=log.isEnabledFor(logging.DEBUG)
-                )
-        return sizes
+            for driver in drivers:
+                fun = '{0}.avail_sizes'.format(driver)
+                if not fun in self.clouds:
+                    # The capability to gather sizes is not supported by this
+                    # cloud module
+                    log.debug(
+                        'The {0!r} cloud provider defined under {1!r} is '
+                        'unable to get the sizes information'.format(
+                            driver, alias
+                        )
+                    )
+                    continue
+
+                try:
+                    mapping = '{0}:{1}'.format(alias, driver)
+                    with saltcloud.utils.CloudProviderContext(
+                            self.clouds[fun], driver):
+                        ret[mapping] = self.clouds[fun]()
+                except Exception as err:
+                    log.error(
+                        'Failed to get the output of \'{0}()\': {1}'.format(
+                            fun, err,
+                        ),
+                        # Show the traceback if the debug logging level is
+                        # enabled
+                        exc_info=log.isEnabledFor(logging.DEBUG)
+                    )
+        return ret
 
     def provider_list(self, lookup='all'):
         '''
         Return a mapping of all image data for available providers
         '''
-        provs = self.get_providers()
-        prov_list = {}
-
+        ret = {}
         lookups = self.build_lookup(lookup)
-        if not lookups:
-            return prov_list
-
-        for prov in provs:
-            if prov not in lookups:
-                continue
-
-            prov_list[prov] = {}
-        return prov_list
+        for alias, drivers in lookups.iteritems():
+            if alias not in ret:
+                ret[alias] = {}
+            for driver in drivers:
+                ret[alias][driver] = {}
+        return ret
 
     def create_all(self):
         '''
@@ -555,8 +627,11 @@ class Cloud(object):
 
         vm_['os'] = config.get_config_value('script', vm_, self.opts)
 
+        func = '{0}.create'.format(self.provider(vm_))
+        prov = vm_['provider']
         try:
-            output = self.clouds['{0}.create'.format(self.provider(vm_))](vm_)
+            with saltcloud.utils.CloudProviderContext(self.clouds[func], prov):
+                output = self.clouds[func](vm_)
 
             if output is not False and 'sync_after_install' in self.opts:
                 if self.opts['sync_after_install'] not in (
@@ -581,6 +656,13 @@ class Cloud(object):
             )
 
         return output
+
+    def get_profile_vm(self, profile):
+        for vm_ in self.opts['vm']:
+            if vm_['profile'] != profile:
+                continue
+            return vm_
+        return None
 
     def profile_provider(self, profile=None):
         for definition in self.opts['vm']:
@@ -679,62 +761,86 @@ class Cloud(object):
         Perform an action on a VM which may be specific to this cloud provider
         '''
         pmap = self.map_providers_parallel()
-
         ret = {}
 
-        current_boxen = {}
-        for provider in pmap:
-            for box in pmap[provider]:
-                current_boxen[box] = provider
+        apply_action = {}
+        for alias, drivers in pmap.iteritems():
+            for driver, nodes in drivers.iteritems():
+                if not isinstance(nodes, dict):
+                    log.warn(
+                        'The cloud driver {0!r} defined under the alias {1!r} '
+                        'did not return a dictionary({2}). Skipping!'.format(
+                            driver, alias, nodes
+                        )
+                    )
+                    continue
 
-        acts = {}
-        for prov, nodes in pmap.items():
-            acts[prov] = []
-            for node in nodes:
-                if node in names:
-                    acts[prov].append(node)
+                for name, details in nodes.iteritems():
+                    if name not in names:
+                        continue
+                    if name not in apply_action:
+                        apply_action[name] = {}
+                    if alias not in apply_action[name]:
+                        apply_action[name][alias] = []
+                    if driver not in apply_action[name][alias]:
+                        apply_action[name][alias].append(driver)
 
-        ret = {}
         completed = []
-        for prov, names_ in acts.items():
-            for name in names:
-                if name in names_:
-                    fun = '{0}.{1}'.format(prov, self.opts['action'])
+        for name, providers in apply_action.iteritems():
+            for alias, drivers in providers.iteritems():
+                for driver in drivers:
+                    fun = '{0}.{1}'.format(driver, self.opts['action'])
                     if fun not in self.clouds:
                         # The cloud provider does not provide the action
                         continue
-                    if kwargs:
-                        ret[name] = self.clouds[fun](
-                            name, kwargs, call='action'
-                        )
-                    else:
-                        ret[name] = self.clouds[fun](name, call='action')
-                    completed.append(name)
+
+                    if name not in ret:
+                        ret[name] = {}
+                    if alias not in ret[name]:
+                        ret[name][alias] = {}
+                    if driver not in ret[name][alias]:
+                        ret[name][alias][driver] = False
+                    with saltcloud.utils.CloudProviderContext(
+                            self.clouds[fun], driver):
+                        if kwargs:
+                            ret[name][alias][driver] = self.clouds[fun](
+                                name, kwargs, call='action'
+                            )
+                        else:
+                            ret[name][alias][driver] = self.clouds[fun](
+                                name, call='action'
+                            )
+                        completed.append(name)
 
         for name in names:
             if name not in completed:
                 print('{0} was not found, not running {1} action'.format(
                     name, self.opts['action'])
                 )
-
         return ret
 
-    def do_function(self, func, prov, kwargs):
+    def do_function(self, prov, func, kwargs):
         '''
         Perform a function against a cloud provider
         '''
-        fun = '{0}.{1}'.format(prov, func)
+        provider = self.get_matching_provider(prov)
+        fun = '{0}.{1}'.format(provider, func)
+        if fun not in self.clouds:
+            raise SaltCloudSystemExit(
+                'The {0!r} provider, for the {1!r} cloud driver, does not '
+                'define the function {2!r}'.format(prov, provider, func)
+            )
+
         log.debug(
             'Trying to execute {0!r} with the following kwargs: {1}'.format(
                 fun, kwargs
             )
         )
-        if kwargs:
-            ret = self.clouds[fun](call='function', kwargs=kwargs)
-        else:
-            ret = self.clouds[fun](call='function')
 
-        return ret
+        with saltcloud.utils.CloudProviderContext(self.clouds[fun], prov):
+            if kwargs:
+                return self.clouds[fun](call='function', kwargs=kwargs)
+            return self.clouds[fun](call='function')
 
 
 class Map(Cloud):
@@ -750,8 +856,17 @@ class Map(Cloud):
         full_map = {}
         dmap = self.read()
         for profile, vmap in dmap.items():
-            provider = self.profile_provider(profile)
-            if provider is None:
+            vm_ = self.get_profile_vm(profile)
+            if vm_ is None:
+                log.info(
+                    'No profile details was found by the name {0!r}.'.format(
+                        profile
+                    )
+                )
+                continue
+
+            provider_alias = vm_['provider']
+            if provider_alias is None:
                 log.info(
                     'No provider for the mapped {0!r} profile was '
                     'found.'.format(
@@ -759,22 +874,24 @@ class Map(Cloud):
                     )
                 )
                 continue
-            for vm in [vm.get('name') for vm in vmap]:
-                if provider not in full_map:
-                    full_map[provider] = {}
 
-                if vm in query_map[provider]:
-                    full_map[provider][vm] = query_map[provider][vm]
-                else:
-                    full_map[provider][vm] = 'Absent'
+            provider_driver = self.build_lookup(provider_alias)[provider_alias]
+            full_provider_mapping = '{0}:{1}'.format(
+                provider_alias, provider_driver[0]
+            )
+            mapped_vms = query_map[provider_alias][provider_driver[0]]
+            for vm_name in [vm.get('name') for vm in vmap]:
+                if full_provider_mapping not in full_map:
+                    full_map[full_provider_mapping] = {}
+                full_map[full_provider_mapping][vm_name] = mapped_vms.get(
+                    vm_name, 'Absent'
+                )
         return full_map
 
     def delete_map(self, query=None):
-        query_map = self.interpolated_map(query=query)
         names = []
-        for profile in query_map:
-            for vm in query_map[profile]:
-                names.append(vm)
+        for provider, vms in self.interpolated_map(query=query).iteritems():
+            names.extend(vms.keys())
         return names
 
     def read(self):
@@ -916,6 +1033,15 @@ class Map(Cloud):
                             'create map'.format(name)
                         )
                         ret['create'].pop(name)
+                    continue
+
+                # Regarding other providers, simply remove them for the create
+                # map.
+                log.warn(
+                    '{0!r} already exists, removing from the '
+                    'create map'.format(name)
+                )
+                ret['create'].pop(name)
 
         if self.opts['hard']:
             if self.opts['enable_hard_maps'] is False:
@@ -1122,8 +1248,7 @@ def create_multiprocessing(parallel_data):
             'Failed to deploy {0[name]!r}. Error: {1}'.format(
                 parallel_data, exc
             ),
-            # Show the traceback if the debug logging level is
-            # enabled
+            # Show the traceback if the debug logging level is enabled
             exc_info=log.isEnabledFor(logging.DEBUG)
         )
         return {parallel_data['name']: {'Error': str(exc)}}
@@ -1143,12 +1268,15 @@ def run_paralel_map_providers_query(data):
     '''
     cloud = Cloud(data['opts'])
     try:
-        return {
-            data['provider']: saltcloud.utils.simple_types_filter(
-                cloud.clouds[data['fun']]()
+        with saltcloud.utils.CloudProviderContext(
+                cloud.clouds[data['fun']], data['driver']):
+            return (
+                data['alias'],
+                data['driver'],
+                saltcloud.utils.simple_types_filter(
+                    cloud.clouds[data['fun']]()
+                )
             )
-        }
     except Exception:
-        # Failed to communicate with the provider, don't list any
-        # nodes
-        return {data['provider']: []}
+        # Failed to communicate with the provider, don't list any nodes
+        return (data['alias'], data['driver'], [])

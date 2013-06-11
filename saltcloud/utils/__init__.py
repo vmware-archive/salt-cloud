@@ -5,6 +5,7 @@ Utility functions for saltcloud
 # Import python libs
 import os
 import pwd
+import sys
 import shutil
 import socket
 import tempfile
@@ -976,3 +977,28 @@ def simple_types_filter(datadict):
             value = repr(value)
         simpledict[key] = value
     return simpledict
+
+
+class CloudProviderContext(object):
+    '''
+    This context manager is responsible for overriding the value of
+    ``__active_profile_name__`` at the module level, reseting to the previous
+    value afterwards.
+    '''
+
+    def __init__(self, function, profile):
+        self.profile = profile
+        self.function = function
+        self.default = None
+
+    def __enter__(self):
+        # Let's store what the module is defining, if anything
+        mod = sys.modules[self.function.__module__]
+        self.default = mod.__active_profile_name__
+        # Override the provided provider within this context
+        mod.__active_profile_name__ = self.profile
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        # Reset to previous value
+        sys.modules[
+            self.function.__module__].__active_profile_name__ = self.default
