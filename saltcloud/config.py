@@ -229,7 +229,23 @@ def apply_vm_profiles_config(overrides, defaults=None):
         # Update the profile's entry with the extended data
         vms[profile] = extended
 
-    return vms.values()
+    # Return a provider -> profiles mapping
+    nvms = {}
+    for profile, details in vms.iteritems():
+        provider_alias = details.get('provider')
+        if ':' not in provider_alias:
+            if provider_alias not in nvms:
+                nvms[provider_alias] = {}
+            nvms[provider_alias][profile] = details
+            continue
+
+        alias, provider = provider_alias.split(':')
+        if alias not in nvms:
+            nvms[alias] = {provider: {}}
+        if provider not in nvms[alias]:
+            nvms[alias][provider] = {}
+        nvms[alias][provider][profile] = details
+    return nvms
 
 
 def cloud_providers_config(path,
