@@ -16,7 +16,7 @@
 #
 
 Name:           salt-cloud
-Version:        0.8.8
+Version:        0.8.9
 Release:        1
 License:        Apache-2.0
 Summary:        Salt Cloud is a generic cloud provisioning tool
