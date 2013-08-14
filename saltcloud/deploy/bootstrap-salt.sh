@@ -2683,6 +2683,8 @@ __gentoo_post_dep() {
     cat >> ${GENTOO_ACKEYS} << _EOT
 # End of bootstrap-salt keywords.
 _EOT
+    # emerge libtool in case it is out of date, fixes compilation issues with crypto++
+    emerge libtool
     # the -o option asks it to emerge the deps but not the package.
     emerge ${__gentoo_use_binhost} -vo salt
 }
