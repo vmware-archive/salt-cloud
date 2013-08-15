@@ -422,8 +422,7 @@ def deploy_script(host, port=22, timeout=900, username='root',
                 root_cmd(hostname_cmd, tty, sudo, **kwargs)
 
                 # Update the hostnames file
-                hostname_cmd = 'sh -c "echo -n {0} > /etc/hostname"'.\
-                                    format(name)
+                hostname_cmd = 'sh -c "echo {0} > /etc/hostname"'.format(name)
                 root_cmd(hostname_cmd, tty, sudo, **kwargs)
 
                 # Update /etc/hosts
