@@ -426,8 +426,8 @@ def deploy_script(host, port=22, timeout=900, username='root',
                 root_cmd(hostname_cmd, tty, sudo, **kwargs)
 
                 # Update /etc/hosts
-                hosts = 'sh -c "echo -e "127.0.0.1\t{0}\t{1}" >> /etc/hosts"'.\
-                                format(name.split('.')[0], name)
+                hosts = 'sh -c "echo 127.0.0.1 {0} {1} >> /etc/hosts"'. \
+                            format(name.split('.')[0], name)
                 root_cmd(hosts, tty, sudo, **kwargs)
 
             # Minion configuration
