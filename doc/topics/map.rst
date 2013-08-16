@@ -16,9 +16,6 @@ machines to make from said profile:
         - web1
         - web2
         - web3
-        - web3
-        - web4
-        - web5
     fedora_high:
         - redis1
         - redis2
@@ -27,8 +24,6 @@ machines to make from said profile:
         - riak1
         - riak2
         - riak3
-        - riak4
-        - riak5
 
 This map file can then be called to roll out all of these virtual machines. Map
 files are called from the salt-cloud command with the -m option:
@@ -52,7 +47,15 @@ that exist but are not specified in the map file will be destroyed:
 
     $ salt-cloud -m /path/to/mapfile -P -H
 
-A map file can include grains:
+Be careful with this argument, it is very dangerous! In fact, it is so
+dangerous that in order to use it, you must explicitly enable it in the main
+configuration file.
+
+.. code-block:: yaml
+
+    enable_hard_maps: True
+
+A map file can include grains and minion configuration options:
 
 .. code-block:: yaml
 
@@ -69,4 +72,28 @@ A map file can include grains:
             grains:
                 cheese: more tasty
                 omelet: with peppers
+
+A map file may also be used with the various query options:
+
+.. code-block:: bash
+
+    $ salt-cloud -m /path/to/mapfile -Q
+    {'aws': {'web1': {'id': 'i-e6aqfegb',
+                         'image': None,
+                         'private_ips': [],
+                         'public_ips': [],
+                         'size': None,
+                         'state': 0}},
+             'web2': {'Absent'}}
+
+...or with the delete option:
+
+.. code-block:: bash
+
+    $ salt-cloud -m /path/to/mapfile -d
+    The following virtual machines are set to be destroyed:
+      web1
+      web2
+
+    Proceed? [N/y]
 

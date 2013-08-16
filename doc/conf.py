@@ -46,9 +46,13 @@ class Mock(object):
             return Mock()
 
 MOCK_MODULES = [
-    'paramiko',
     'salt',
+    'salt.config',
+    'salt.utils',
+    'salt.utils.event',
+    'salt.client',
     'salt.crypt',
+    'salt.exceptions',
     'yaml',
     'salt.loader',
 ]
@@ -90,7 +94,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'salt-cloud'
-copyright = u'2012, Thomas S Hatch'
+copyright = u'2012 - 2013, Salt Stack, Inc.'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -263,7 +267,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 authors = [
-    'Thomas S. Hatch <thatch45@gmail.com> and many others, please see the Authors file',
+    'Thomas S. Hatch <thatch@saltstack.com> and many others, please see the Authors file',
 ]
 
 man_pages = [
