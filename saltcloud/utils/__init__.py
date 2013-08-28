@@ -442,8 +442,21 @@ def deploy_script(host, port=22, timeout=900, username='root',
                 root_cmd('service sshd restart', tty, sudo, **kwargs)
 
             # Update hostname on the minion
-            hostname_cmd = 'test `hostname` == {0} || hostname {0}'.format(name)
-            root_cmd(hostname_cmd, tty, sudo, **kwargs)
+            test_hostname = 'test `hostname` == {0}'.format(name)
+
+            if root_cmd(test_hostname, tty, sudo, **kwargs) != 0:
+                # Set the hostname
+                hostname_cmd = 'hostname {0}'.format(name)
+                root_cmd(hostname_cmd, tty, sudo, **kwargs)
+
+                # Update the hostnames file
+                hostname_cmd = 'sh -c "echo {0} > /etc/hostname"'.format(name)
+                root_cmd(hostname_cmd, tty, sudo, **kwargs)
+
+                # Update /etc/hosts
+                hosts = 'sh -c "echo 127.0.0.1 {0} {1} >> /etc/hosts"'. \
+                            format(name.split('.')[0], name)
+                root_cmd(hosts, tty, sudo, **kwargs)
 
             # Minion configuration
             if minion_pem:
