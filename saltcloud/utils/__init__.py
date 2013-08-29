@@ -727,7 +727,9 @@ def scp_file(dest_path, contents, kwargs):
         # Set hosts key database path to /dev/null, ie, non-existing
         '-oUserKnownHostsFile=/dev/null',
         # Don't re-use the SSH connection. Less failures.
-        '-oControlPath=none'
+        '-oControlPath=none',
+        # Don't be verbose when running commands.
+        '-o LogLevel=quiet',
     ]
     if 'key_filename' in kwargs:
         # There should never be both a password and an ssh key passed in, so
@@ -799,7 +801,9 @@ def root_cmd(command, tty, sudo, **kwargs):
         # Set hosts key database path to /dev/null, ie, non-existing
         '-oUserKnownHostsFile=/dev/null',
         # Don't re-use the SSH connection. Less failures.
-        '-oControlPath=none'
+        '-oControlPath=none',
+        # Don't be verbose when running commands.
+        '-o LogLevel=quiet',
     ])
 
     if 'key_filename' in kwargs:
