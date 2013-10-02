@@ -67,6 +67,18 @@ configuration at ``/etc/salt/cloud.providers`` or
 
       provider: openstack
 
+If your OpenStack configuration doesn't provide automatically a floating IP
+for each newly created image, you can configure salt-cloud to assign it
+from a floating IP pool :
+
+.. code-block:: yaml
+
+  my-openstack-config:
+    identity_url: 'http://control.openstack.example.org:5000/v2.0/'
+    [snip]
+    assign_floating_ip_from: nova
+
+
 Either a password or an API key must also be specified:
 
 .. code-block:: yaml
@@ -410,6 +422,23 @@ def create(vm_):
             exc_info=log.isEnabledFor(logging.DEBUG)
         )
         return False
+
+    assign_floating_ip_from = config.get_config_value(
+        'assign_floating_ip_from', vm_, __opts__, search_global=False
+    )
+    log.debug('assign_floating_ip_from %s' % assign_floating_ip_from)
+    if assign_floating_ip_from:
+        pools = conn.ex_list_floating_ip_pools()
+        floating_ip = None
+        for pool in pools:
+            if pool.name == assign_floating_ip_from:
+                break
+        for ip in pool.list_floating_ips():
+            if ip.node_id is None:
+                floating_ip = pool.get_floating_ip(ip.ip_address)
+                break
+	conn.ex_attach_floating_ip_to_node(data, floating_ip)
+
 
     def __query_node_data(vm_, data):
         try:
