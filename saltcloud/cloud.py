@@ -1115,7 +1115,7 @@ class Map(Cloud):
                 # merge minion grains from map file
                 if 'minion' in overrides:
                     if 'grains' in overrides['minion']:
-                        if 'grains' in nodedata['minion']:
+                        if 'grains' in nodedata.get('minion', {}):
                             nodedata['minion']['grains'].update(
                                 overrides['minion']['grains']
                             )
