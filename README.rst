@@ -1,47 +1,57 @@
-==========
-Salt Cloud
-==========
+===================================
+``salt-cloud`` is Now Part of Salt!
+===================================
 
-Salt Cloud is a tool for provisioning salted minions across various cloud
-providers. Currently supported providers are:
+.. note:: This repository is deprecated.
 
-.. code-block:: yaml
+    All new pull requests and issues should be filed against the `main Salt
+    repository`__.
 
-    - Amazon EC2
-    - GoGrid
-    - HP Cloud (using OpenStack)
-    - Joyent
-    - Linode
-    - OpenStack
-    - Rackspace (using OpenStack)
-    - Parallels
-    - DigitalOcean
-    - IBM Smart Cloud Enterprise
-    - SoftLayer
+The Salt team is excited to report that the ``salt-cloud`` repository has been
+merged into the main Salt repository.
 
-The salt-cloud command can be used to query configured providers, create VMs on
-them, deploy salt-minion on those VMs and destroy them when no longer needed.
+The merge happened on November 8th, 2013 in `pull request #8352`__.
 
-Salt Cloud requires Salt to be installed, but does not require any Salt daemons
-to be running. However, if used in a salted environment, it is best to run Salt
-Cloud on the salt-master, so that it can properly lay down salt keys when it
-deploys machines, and then properly remove them later. If Salt Cloud is run in
-this manner, minions will automatically be approved by the master; no need to
-manually authenticate them later.
+.. __: https://github.com/saltstack/salt
+.. __: https://github.com/saltstack/salt/pull/8352
 
-Documentation
-=============
+Frequently asked questions
+--------------------------
 
-Installation instructions, and getting started guides.
+What Salt release includes ``salt-cloud``?
+    Salt will include native ``salt-cloud`` in the `Salt Hydrogen release`__.
 
-https://salt-cloud.readthedocs.org/en/latest/
+    .. __: https://github.com/saltstack/salt/issues?milestone=39
 
-IRC Chat
-========
+What does this mean for the future of ``salt-cloud``?
+    One fewer dependency.
 
-Join the vibrant, helpful and positive Salt Stack chat room in Freenode at
-#salt. There is no need to introduce yourself, or ask permission to join in,
-just help and be helped! Make sure to wait for an answer, sometimes it may take
-a few moments for someone to reply.
+    ``salt-cloud`` will continue to operate in the same way and the config
+    files will live in the same location as before. The only end-user
+    difference is ``salt-cloud`` will not need to be installed as a separate
+    package.
 
-http://webchat.freenode.net/?channels=salt
+What will happen to the ``salt-cloud`` repository and issue tracker?
+    We will leave the ``salt-cloud`` repository in place on GitHub for the
+    foreseeable future. It will contain this deprecation notice and serve as a
+    historical reference.
+
+Has the commit history and authorship for ``salt-cloud`` been lost?
+    **No!**
+
+    We have merged these two repositories using ``git mv`` followed by a
+    regular ``git merge`` that preserves all the rich Git history and
+    authorship of ``salt-cloud``. All commits made to ``salt-cloud`` can be
+    referenced using the exact same SHA1 in the Salt repository.
+
+    In order to view the full history of a file that came from the
+    ``salt-cloud`` repository from within the Salt repository use the
+    ``--follow`` flag in Git. Unfortunately, at the time of writing, GitHub's
+    history view does not include this flag. For example, to view the full
+    history of the ``ec2`` driver::
+
+        git log --follow path/to/clouds/ec2.py
+
+    Note, any commit messages that reference GitHub issues from a commit from
+    ``salt-cloud`` will get confused and link to the corresponding issue in the
+    Salt repository (if there is one of that same issue number).
