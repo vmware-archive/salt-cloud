@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 '''
 The generic libcloud template used to create the connections and deploy the
 cloud virtual machines
@@ -8,7 +9,7 @@ import os
 import logging
 
 
-# pylint: disable-msg=W0611
+# pylint: disable=W0611
 # Import libcloud
 from libcloud.compute.types import Provider
 from libcloud.compute.providers import get_driver
@@ -96,7 +97,7 @@ def avail_locations(conn=None):
     relevant data
     '''
     if not conn:
-        conn = get_conn()   # pylint: disable-msg=E0602
+        conn = get_conn()   # pylint: disable=E0602
 
     locations = conn.list_locations()
     ret = {}
@@ -127,7 +128,7 @@ def avail_images(conn=None):
     relevant data
     '''
     if not conn:
-        conn = get_conn()   # pylint: disable-msg=E0602
+        conn = get_conn()   # pylint: disable=E0602
 
     images = conn.list_images()
     ret = {}
@@ -156,7 +157,7 @@ def avail_sizes(conn=None):
     relevant data
     '''
     if not conn:
-        conn = get_conn()   # pylint: disable-msg=E0602
+        conn = get_conn()   # pylint: disable=E0602
 
     sizes = conn.list_sizes()
     ret = {}
@@ -283,12 +284,12 @@ def destroy(name, conn=None):
     saltcloud.utils.fire_event(
         'event',
         'destroying instance',
-        'salt.cloud.destroy',
+        'salt/cloud/{0}/destroying'.format(name),
         {'name': name},
     )
 
     if not conn:
-        conn = get_conn()   # pylint: disable-msg=E0602
+        conn = get_conn()   # pylint: disable=E0602
 
     node = get_node(conn, name)
     if node is None:
@@ -325,7 +326,7 @@ def reboot(name, conn=None):
     Reboot a single VM
     '''
     if not conn:
-        conn = get_conn()   # pylint: disable-msg=E0602
+        conn = get_conn()   # pylint: disable=E0602
 
     node = get_node(conn, name)
     if node is None:
@@ -357,7 +358,7 @@ def list_nodes(conn=None):
     Return a list of the VMs that are on the provider
     '''
     if not conn:
-        conn = get_conn()   # pylint: disable-msg=E0602
+        conn = get_conn()   # pylint: disable=E0602
 
     nodes = conn.list_nodes()
     ret = {}
@@ -379,7 +380,7 @@ def list_nodes_full(conn=None):
     Return a list of the VMs that are on the provider, with all fields
     '''
     if not conn:
-        conn = get_conn()   # pylint: disable-msg=E0602
+        conn = get_conn()   # pylint: disable=E0602
 
     nodes = conn.list_nodes()
     ret = {}
@@ -396,7 +397,7 @@ def list_nodes_select(conn=None):
     Return a list of the VMs that are on the provider, with select fields
     '''
     if not conn:
-        conn = get_conn()   # pylint: disable-msg=E0602
+        conn = get_conn()   # pylint: disable=E0602
 
     nodes = conn.list_nodes()
     ret = {}
@@ -410,6 +411,19 @@ def list_nodes_select(conn=None):
                 pairs[key] = value
         ret[node.name] = pairs
     return ret
+
+
+def show_instance(name, call=None):
+    '''
+    Show the details from the provider concerning an instance
+    '''
+    if call != 'action':
+        raise SaltCloudSystemExit(
+            'The show_instance action must be called with -a or --action.'
+        )
+
+    nodes = list_nodes_full()
+    return nodes[name]
 
 
 def conn_has_method(conn, method_name):

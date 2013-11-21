@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 '''
 OpenStack Nova Cloud Module
 ===========================
@@ -65,11 +66,13 @@ following option may be useful. Using the old syntax:
       ignore_cidr: 192.168.50.0/24
 
 '''
+# pylint: disable=E0102
 
 # The import section is mostly libcloud boilerplate
 
 # Import python libs
 import os
+import copy
 import logging
 import socket
 import pprint
@@ -121,7 +124,7 @@ from saltcloud.exceptions import (
 try:
     from netaddr import all_matching_cidrs
     HAS_NETADDR = True
-except:
+except ImportError:
     HAS_NETADDR = False
 
 # Get logging started
@@ -205,7 +208,7 @@ def preferred_ip(vm_, ips):
         try:
             socket.inet_pton(family, ip)
             return ip
-        except:
+        except Exception:
             continue
 
         return False
@@ -223,7 +226,7 @@ def ignore_cidr(vm_, ip):
         'ignore_cidr', vm_, __opts__, default='', search_global=False
     )
     if cidr != '' and all_matching_cidrs(ip, [cidr]):
-        log.warning("IP '%s' found within '%s'; ignoring it.'" % (ip, cidr))
+        log.warning('IP "{0}" found within "{1}"; ignoring it.'.format(ip, cidr))
         return True
 
     return False
@@ -353,7 +356,6 @@ def create(vm_):
             g for g in avail_groups if g.name in group_list
         ]
 
-
     networks = config.get_config_value(
         'networks', vm_, __opts__, search_global=False
     )
@@ -426,7 +428,7 @@ def create(vm_):
                     )
                 )
             )
-        except Exception, err:
+        except Exception as err:
             log.error(
                 'Failed to get nodes list: {0}'.format(
                     err
@@ -467,7 +469,7 @@ def create(vm_):
                 ip = floating[0].ip_address
                 conn.ex_attach_floating_ip_to_node(data, ip)
                 log.info(
-                    "Attaching floating IP '%s' to node '%s'" % (ip, name)
+                    'Attaching floating IP "{0}" to node "{1}"'.format(ip, name)
                 )
             except Exception as e:
                 # Note(pabelanger): Because we loop, we only want to attach the
@@ -504,7 +506,7 @@ def create(vm_):
                 return data
 
         if result:
-            log.debug('result = %s' % result)
+            log.debug('result = {0}'.format(result))
             data.private_ips = result
             if ssh_interface(vm_) == 'private_ips':
                 return data
@@ -537,7 +539,7 @@ def create(vm_):
     if ssh_interface(vm_) == 'private_ips':
         ip_address = preferred_ip(vm_, data.private_ips)
     elif (rackconnect(vm_) is True and ssh_interface(vm_) != 'private_ips'):
-            ip_address = data.public_ips
+        ip_address = data.public_ips
     else:
         ip_address = preferred_ip(vm_, data.public_ips)
     log.debug('Using IP address {0}'.format(ip_address))
@@ -545,16 +547,36 @@ def create(vm_):
     if not ip_address:
         raise SaltCloudSystemExit('A valid IP address was not found')
 
+    ssh_username = config.get_config_value(
+        'ssh_username', vm_, __opts__, default='root'
+    )
+
     deploy_kwargs = {
         'host': ip_address,
         'name': vm_['name'],
         'sock_dir': __opts__['sock_dir'],
+        'tmp_dir': config.get_config_value(
+            'tmp_dir', vm_, __opts__, default='/tmp/.saltcloud'
+        ),
+        'deploy_command': config.get_config_value(
+            'deploy_command', vm_, __opts__,
+            default='/tmp/.saltcloud/deploy.sh',
+        ),
         'start_action': __opts__['start_action'],
         'parallel': __opts__['parallel'],
         'minion_pem': vm_['priv_key'],
         'minion_pub': vm_['pub_key'],
         'keep_tmp': __opts__['keep_tmp'],
         'preseed_minion_keys': vm_.get('preseed_minion_keys', None),
+        'sudo': config.get_config_value(
+            'sudo', vm_, __opts__, default=(ssh_username != 'root')
+        ),
+        'sudo_password': config.get_config_value(
+            'sudo_password', vm_, __opts__, default=None
+        ),
+        'tty': config.get_config_value(
+            'tty', vm_, __opts__, default=False
+        ),
         'display_ssh_output': config.get_config_value(
             'display_ssh_output', vm_, __opts__, default=True
         ),
@@ -565,11 +587,7 @@ def create(vm_):
         'minion_conf': saltcloud.utils.minion_config(__opts__, vm_)
     }
 
-    ssh_username = config.get_config_value(
-        'ssh_username', vm_, __opts__, default='root'
-    )
     if ssh_username != 'root':
-        deploy_kwargs['deploy_command'] = '/tmp/deploy.sh'
         deploy_kwargs['username'] = ssh_username
         deploy_kwargs['tty'] = True
 
@@ -585,13 +603,6 @@ def create(vm_):
         log.debug('Logging into SSH using password')
 
     ret = {}
-    sudo = config.get_config_value(
-        'sudo', vm_, __opts__, default=(ssh_username != 'root')
-    )
-    if sudo is not None:
-        deploy_kwargs['sudo'] = sudo
-        log.debug('Running root commands using sudo')
-
     if config.get_config_value('deploy', vm_, __opts__) is True:
         deploy_script = script(vm_)
         deploy_kwargs['script'] = deploy_script.script
@@ -625,13 +636,19 @@ def create(vm_):
             )
 
         # Store what was used to the deploy the VM
-        ret['deploy_kwargs'] = deploy_kwargs
+        event_kwargs = copy.deepcopy(deploy_kwargs)
+        del(event_kwargs['minion_pem'])
+        del(event_kwargs['minion_pub'])
+        del(event_kwargs['sudo_password'])
+        if 'password' in kwargs:
+            del(event_kwargs['password'])
+        ret['deploy_kwargs'] = event_kwargs
 
         saltcloud.utils.fire_event(
             'event',
             'executing deploy script',
             'salt/cloud/{0}/deploying'.format(vm_['name']),
-            {'kwargs': deploy_kwargs},
+            {'kwargs': event_kwargs},
         )
 
         deployed = False
@@ -701,6 +718,8 @@ def list_nodes():
     server_list = _salt_client().cmd(conn['auth_minion'],
                                    'nova.server_list',
                                    [conn['profile']])
+    if not server_list:
+        return {}
     for server_name in server_list[conn['auth_minion']]:
         server = server_list[conn['auth_minion']][server_name]
         ret[server['name']] = {
@@ -730,31 +749,6 @@ def list_nodes_full():
         ret[server['name']]['state'] = server['status']
         ret[server['name']]['private_ips'] = [server['accessIPv4']]
         ret[server['name']]['public_ips'] = [server['accessIPv4'], server['accessIPv6']]
-    return ret
-
-
-def list_nodes_select():
-    '''
-    Return a list of the VMs that are on the provider, with select fields
-    '''
-    ret = {}
-    nodes = list_nodes_full(get_location())
-    if 'error' in nodes:
-        raise SaltCloudSystemExit(
-            'An error occurred while listing nodes: {0}'.format(
-                nodes['error']['Errors']['Error']['Message']
-            )
-        )
-
-    for node in nodes:
-        pairs = {}
-        data = nodes[node]
-        for key in data:
-            if str(key) in __opts__['query.selection']:
-                value = data[key]
-                pairs[key] = value
-        ret[node] = pairs
-
     return ret
 
 

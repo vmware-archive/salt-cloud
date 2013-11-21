@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 '''
 Joyent Cloud Module
 ===================
@@ -42,11 +43,13 @@ associated with that vm. An example profile might look like:
         image: centos-6
         location: us-east-1
 '''
+# pylint: disable=E0102
 
 # The import section is mostly libcloud boilerplate
 
 # Import python libs
 import os
+import copy
 import urllib
 import httplib
 import urllib2
@@ -168,8 +171,9 @@ def create(vm_):
     '''
     Create a single VM from a data dict
 
+    CLI Example:
 
-        CLI Example:
+    .. code-block:: bash
 
         salt-cloud -p profile_name vm_name
     '''
@@ -282,6 +286,10 @@ def create(vm_):
 
     data = reformat_node(data)
 
+    ssh_username = config.get_config_value(
+        'ssh_username', vm_, __opts__, default='root'
+    )
+
     if config.get_config_value('deploy', vm_, __opts__) is True:
         host = data['public_ips'][0]
         if ssh_interface(vm_) == 'private_ips':
@@ -290,12 +298,17 @@ def create(vm_):
         deploy_script = script(vm_)
         deploy_kwargs = {
             'host': host,
-            'username': 'root',
+            'username': ssh_username,
             'key_filename': key_filename,
             'script': deploy_script.script,
             'name': vm_['name'],
-            'deploy_command': '/tmp/deploy.sh',
-            'tty': True,
+            'tmp_dir': config.get_config_value(
+                'tmp_dir', vm_, __opts__, default='/tmp/.saltcloud'
+            ),
+            'deploy_command': config.get_config_value(
+                'deploy_command', vm_, __opts__,
+                default='/tmp/.saltcloud/deploy.sh',
+            ),
             'start_action': __opts__['start_action'],
             'parallel': __opts__['parallel'],
             'sock_dir': __opts__['sock_dir'],
@@ -304,6 +317,15 @@ def create(vm_):
             'minion_pub': vm_['pub_key'],
             'keep_tmp': __opts__['keep_tmp'],
             'preseed_minion_keys': vm_.get('preseed_minion_keys', None),
+            'sudo': config.get_config_value(
+                'sudo', vm_, __opts__, default=(ssh_username != 'root')
+            ),
+            'sudo_password': config.get_config_value(
+                'sudo_password', vm_, __opts__, default=None
+            ),
+            'tty': config.get_config_value(
+                'tty', vm_, __opts__, default=True
+            ),
             'display_ssh_output': config.get_config_value(
                 'display_ssh_output', vm_, __opts__, default=True
             ),
@@ -343,13 +365,19 @@ def create(vm_):
             )
 
         # Store what was used to the deploy the VM
-        ret['deploy_kwargs'] = deploy_kwargs
+        event_kwargs = copy.deepcopy(deploy_kwargs)
+        del(event_kwargs['minion_pem'])
+        del(event_kwargs['minion_pub'])
+        del(event_kwargs['sudo_password'])
+        if 'password' in event_kwargs:
+            del(event_kwargs['password'])
+        ret['deploy_kwargs'] = event_kwargs
 
         saltcloud.utils.fire_event(
             'event',
             'executing deploy script',
             'salt/cloud/{0}/deploying'.format(vm_['name']),
-            {'kwargs': deploy_kwargs},
+            {'kwargs': event_kwargs},
         )
 
         deployed = False
@@ -421,12 +449,15 @@ def create_node(**kwargs):
 def destroy(name, call=None):
     '''
     destroy a machine by name
+
     :param name: name given to the machine
     :param call: call value in this case is 'action'
     :return: array of booleans , true if successful;ly stopped and true if
              successfully removed
 
-        CLI Example:
+    CLI Example:
+
+    .. code-block:: bash
 
         salt-cloud -d vm_name
 
@@ -459,8 +490,9 @@ def reboot(name, call=None):
     :param call: call value in this case is 'action'
     :return: true if successful
 
-
     CLI Example:
+
+    .. code-block:: bash
 
         salt-cloud -a reboot vm_name
     '''
@@ -478,8 +510,9 @@ def stop(name, call=None):
     :param call: call value in this case is 'action'
     :return: true if successful
 
-
     CLI Example:
+
+    .. code-block:: bash
 
         salt-cloud -a stop vm_name
     '''
@@ -499,6 +532,8 @@ def start(name, call=None):
 
 
     CLI Example:
+
+    .. code-block:: bash
 
         salt-cloud -a start vm_name
     '''
@@ -721,8 +756,9 @@ def list_nodes(full=False):
     '''
     list of nodes, keeping only a brief listing
 
-
     CLI Example:
+
+    .. code-block:: bash
 
         salt-cloud -Q
     '''
@@ -752,8 +788,9 @@ def list_nodes_full():
     '''
     list of nodes, maintaining all content provided from joyent listings
 
-
     CLI Example:
+
+    .. code-block:: bash
 
         salt-cloud -F
     '''
@@ -766,8 +803,9 @@ def avail_images():
 
     CLI Example:
 
-        salt-cloud --list-images
+    .. code-block:: bash
 
+        salt-cloud --list-images
     '''
     rcode, items = query2(command='/my/datasets')
     if rcode not in VALID_RESPONSE_CODES:
@@ -780,6 +818,8 @@ def avail_sizes():
     get list of available packages
 
     CLI Example:
+
+    .. code-block:: bash
 
         salt-cloud --list-sizes
     '''
@@ -836,6 +876,8 @@ def import_key(kwargs=None, call=None):
 
     CLI Example:
 
+    .. code-block:: bash
+
         salt-cloud -f import_key joyent keyname=mykey keyfile=/tmp/mykey.pub
     '''
     if call != 'function':
@@ -877,6 +919,8 @@ def delete_key(kwargs=None, call=None):
     List the keys available
 
     CLI Example:
+
+    .. code-block:: bash
 
         salt-cloud -f delete_key joyent keyname=mykey
     '''

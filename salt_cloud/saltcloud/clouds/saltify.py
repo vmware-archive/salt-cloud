@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 '''
 Saltify Module
 ==============
@@ -6,12 +7,13 @@ bare metal, using SSH. This module is useful for provisioning machines which
 are already installed, but not Salted.
 
 Use of this module requires no configuration in the main cloud configuration
-file. However, profiles must still be configured, as described in the saltify
-documentation.
+file. However, profiles must still be configured, as described in the
+:ref:`core config documentation <config-saltify>`.
 '''
 
 # Import python libs
 import os
+import copy
 import logging
 
 # Import salt libs
@@ -95,7 +97,13 @@ def create(vm_):
         'username': ssh_username,
         'script': deploy_script,
         'name': vm_['name'],
-        'deploy_command': '/tmp/deploy.sh',
+        'tmp_dir': config.get_config_value(
+            'tmp_dir', vm_, __opts__, default='/tmp/.saltcloud'
+        ),
+        'deploy_command': config.get_config_value(
+            'deploy_command', vm_, __opts__,
+            default='/tmp/.saltcloud/deploy.sh',
+        ),
         'start_action': __opts__['start_action'],
         'parallel': __opts__['parallel'],
         'sock_dir': __opts__['sock_dir'],
@@ -105,6 +113,12 @@ def create(vm_):
         'keep_tmp': __opts__['keep_tmp'],
         'sudo': config.get_config_value(
             'sudo', vm_, __opts__, default=(ssh_username != 'root')
+        ),
+        'sudo_password': config.get_config_value(
+            'sudo_password', vm_, __opts__, default=None
+        ),
+        'tty': config.get_config_value(
+            'tty', vm_, __opts__, default=True
         ),
         'password': config.get_config_value(
             'password', vm_, __opts__, search_global=False
@@ -147,15 +161,20 @@ def create(vm_):
         )
 
     # Store what was used to the deploy the VM
-    ret['deploy_kwargs'] = deploy_kwargs
+    event_kwargs = copy.deepcopy(deploy_kwargs)
+    del(event_kwargs['minion_pem'])
+    del(event_kwargs['minion_pub'])
+    del(event_kwargs['sudo_password'])
+    if 'password' in event_kwargs:
+        del(event_kwargs['password'])
+    ret['deploy_kwargs'] = event_kwargs
 
     saltcloud.utils.fire_event(
         'event',
         'executing deploy script',
         'salt/cloud/{0}/deploying'.format(vm_['name']),
-        {'kwargs': deploy_kwargs},
+        {'kwargs': event_kwargs},
     )
-
 
     deployed = False
     if win_installer:
@@ -191,6 +210,7 @@ def script(vm_):
         )
     )
 
+
 def get_configured_provider():
     '''
     Return the first configured instance.
@@ -200,4 +220,3 @@ def get_configured_provider():
         __active_provider_name__ or 'saltify',
         ()
     )
-

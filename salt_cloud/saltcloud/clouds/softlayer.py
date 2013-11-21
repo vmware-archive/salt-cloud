@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 '''
 SoftLayer Cloud Module
 ======================
@@ -19,8 +20,10 @@ configuration at:
       provider: softlayer
 
 '''
+# pylint: disable=E0102
 
 # Import python libs
+import copy
 import pprint
 import logging
 import time
@@ -50,6 +53,14 @@ def __virtual__():
     '''
     Set up the libcloud functions and check for SoftLayer configurations.
     '''
+    if not HAS_SLLIBS:
+        log.debug(
+            'The SoftLayer Python Library needs to be installed in ordere to'
+            'use the SoftLayer salt.cloud module. See: '
+            'https://pypi.python.org/pypi/SoftLayer'
+        )
+        return False
+
     if get_configured_provider() is False:
         log.debug(
             'There is no SoftLayer cloud provider configuration available. '
@@ -145,7 +156,6 @@ def avail_images():
     response = conn.getCreateObjectOptions()
     conn = get_conn('SoftLayer_Account')
     response = conn.getBlockDeviceTemplateGroups()
-    return response
     for image in response['operatingSystems']:
         ret[image['itemPrice']['item']['description']] = {
             'name': image['itemPrice']['item']['description'],
@@ -261,7 +271,7 @@ def create(vm_):
     if public_vlan:
         kwargs['primaryNetworkComponent'] = {
             'networkVlan': {
-                'id': vlan_id,
+                'id': public_vlan,
             }
         }
 
@@ -358,16 +368,26 @@ def create(vm_):
     response['password'] = passwd
     response['public_ip'] = ip_address
 
+    ssh_username = config.get_config_value(
+        'ssh_username', vm_, __opts__, default='root'
+    )
+
     ret = {}
     if config.get_config_value('deploy', vm_, __opts__) is True:
         deploy_script = script(vm_)
         deploy_kwargs = {
             'host': ip_address,
-            'username': 'root',
+            'username': ssh_username,
             'password': passwd,
             'script': deploy_script.script,
             'name': vm_['name'],
-            'deploy_command': '/tmp/deploy.sh',
+            'tmp_dir': config.get_config_value(
+                'tmp_dir', vm_, __opts__, default='/tmp/.saltcloud'
+            ),
+            'deploy_command': config.get_config_value(
+                'deploy_command', vm_, __opts__,
+                default='/tmp/.saltcloud/deploy.sh',
+            ),
             'start_action': __opts__['start_action'],
             'parallel': __opts__['parallel'],
             'sock_dir': __opts__['sock_dir'],
@@ -376,6 +396,15 @@ def create(vm_):
             'minion_pub': vm_['pub_key'],
             'keep_tmp': __opts__['keep_tmp'],
             'preseed_minion_keys': vm_.get('preseed_minion_keys', None),
+            'sudo': config.get_config_value(
+                'sudo', vm_, __opts__, default=(ssh_username != 'root')
+            ),
+            'sudo_password': config.get_config_value(
+                'sudo_password', vm_, __opts__, default=None
+            ),
+            'tty': config.get_config_value(
+                'tty', vm_, __opts__, default=False
+            ),
             'display_ssh_output': config.get_config_value(
                 'display_ssh_output', vm_, __opts__, default=True
             ),
@@ -415,13 +444,19 @@ def create(vm_):
             )
 
         # Store what was used to the deploy the VM
-        ret['deploy_kwargs'] = deploy_kwargs
+        event_kwargs = copy.deepcopy(deploy_kwargs)
+        del(event_kwargs['minion_pem'])
+        del(event_kwargs['minion_pub'])
+        del(event_kwargs['sudo_password'])
+        if 'password' in kwargs:
+            del(event_kwargs['password'])
+        ret['deploy_kwargs'] = event_kwargs
 
         saltcloud.utils.fire_event(
             'event',
             'executing deploy script',
             'salt/cloud/{0}/deploying'.format(vm_['name']),
-            {'kwargs': deploy_kwargs},
+            {'kwargs': event_kwargs},
         )
 
         deployed = False
