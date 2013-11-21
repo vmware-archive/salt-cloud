@@ -549,8 +549,13 @@ def deploy_script(host, port=22, timeout=900, username='root',
                 root_cmd(subsys_command, tty, sudo, **kwargs)
                 root_cmd('service sshd restart', tty, sudo, **kwargs)
 
-            root_cmd('mkdir -p {0}'.format(tmp_dir), tty, sudo, **kwargs)
-            root_cmd('chmod 700 {0}'.format(tmp_dir), tty, sudo, **kwargs)
+            #root_cmd('mkdir -p {0}'.format(tmp_dir), tty, sudo, **kwargs)
+            #root_cmd('chmod 700 {0}'.format(tmp_dir), tty, sudo, **kwargs)
+            root_cmd(
+                '[ ! -d {0} ] && (mkdir -p {0}; chown 700 {0}) || '
+                'echo "Directory {0!r} already exists..."'.format(tmp_dir),
+                tty, sudo, **kwargs
+            )
 
             # Minion configuration
             if minion_pem:
