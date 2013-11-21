@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 '''
 Digital Ocean Cloud Module
 ==========================
@@ -32,6 +33,7 @@ Using the new format, set up the cloud configuration at
 
 # Import python libs
 import os
+import copy
 import time
 import json
 import pprint
@@ -325,15 +327,25 @@ def create(vm_):
         finally:
             raise SaltCloudSystemExit(exc.message)
 
+    ssh_username = config.get_config_value(
+        'ssh_username', vm_, __opts__, default='root'
+    )
+
     if config.get_config_value('deploy', vm_, __opts__) is True:
         deploy_script = script(vm_)
         deploy_kwargs = {
             'host': data['ip_address'],
-            'username': 'root',
+            'username': ssh_username,
             'key_filename': key_filename,
             'script': deploy_script,
             'name': vm_['name'],
-            'deploy_command': '/tmp/deploy.sh',
+            'tmp_dir': config.get_config_value(
+                'tmp_dir', vm_, __opts__, default='/tmp/.saltcloud'
+            ),
+            'deploy_command': config.get_config_value(
+                'deploy_command', vm_, __opts__,
+                default='/tmp/.saltcloud/deploy.sh',
+            ),
             'start_action': __opts__['start_action'],
             'parallel': __opts__['parallel'],
             'sock_dir': __opts__['sock_dir'],
@@ -344,6 +356,15 @@ def create(vm_):
             'preseed_minion_keys': vm_.get('preseed_minion_keys', None),
             'display_ssh_output': config.get_config_value(
                 'display_ssh_output', vm_, __opts__, default=True
+            ),
+            'sudo': config.get_config_value(
+                'sudo', vm_, __opts__, default=(ssh_username != 'root')
+            ),
+            'sudo_password': config.get_config_value(
+                'sudo_password', vm_, __opts__, default=None
+            ),
+            'tty': config.get_config_value(
+                'tty', vm_, __opts__, default=False
             ),
             'script_args': config.get_config_value(
                 'script_args', vm_, __opts__
@@ -381,13 +402,19 @@ def create(vm_):
             )
 
         # Store what was used to the deploy the VM
-        ret['deploy_kwargs'] = deploy_kwargs
+        event_kwargs = copy.deepcopy(deploy_kwargs)
+        del(event_kwargs['minion_pem'])
+        del(event_kwargs['minion_pub'])
+        del(event_kwargs['sudo_password'])
+        if 'password' in event_kwargs:
+            del(event_kwargs['password'])
+        ret['deploy_kwargs'] = event_kwargs
 
         saltcloud.utils.fire_event(
             'event',
             'executing deploy script',
             'salt/cloud/{0}/deploying'.format(vm_['name']),
-            {'kwargs': deploy_kwargs},
+            {'kwargs': event_kwargs},
         )
 
         deployed = False

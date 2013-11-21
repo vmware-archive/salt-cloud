@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 '''
 Parallels Cloud Module
 ======================
@@ -33,6 +34,7 @@ Using the new format, set up the cloud configuration at
 '''
 
 # Import python libs
+import copy
 import time
 import pprint
 import urllib
@@ -41,7 +43,7 @@ import logging
 
 # Import salt libs
 import salt.utils
-from salt._compat import ElementTree as ET
+from saltcloud._compat import ElementTree as ET
 
 # Import salt cloud libs
 import saltcloud.utils
@@ -337,17 +339,27 @@ def create(vm_):
     comps = data['network']['public-ip']['address'].split('/')
     public_ip = comps[0]
 
+    ssh_username = config.get_config_value(
+        'ssh_username', vm_, __opts__, default='root'
+    )
+
     if config.get_config_value('deploy', vm_, __opts__) is True:
         deploy_script = script(vm_)
         deploy_kwargs = {
             'host': public_ip,
-            'username': 'root',
+            'username': ssh_username,
             'password': config.get_config_value(
                 'password', vm_, __opts__, search_global=False
             ),
             'script': deploy_script,
             'name': vm_['name'],
-            'deploy_command': '/tmp/deploy.sh',
+            'tmp_dir': config.get_config_value(
+                'tmp_dir', vm_, __opts__, default='/tmp/.saltcloud'
+            ),
+            'deploy_command': config.get_config_value(
+                'deploy_command', vm_, __opts__,
+                default='/tmp/.saltcloud/deploy.sh',
+            ),
             'start_action': __opts__['start_action'],
             'parallel': __opts__['parallel'],
             'sock_dir': __opts__['sock_dir'],
@@ -356,6 +368,15 @@ def create(vm_):
             'minion_pub': vm_['pub_key'],
             'keep_tmp': __opts__['keep_tmp'],
             'preseed_minion_keys': vm_.get('preseed_minion_keys', None),
+            'sudo': config.get_config_value(
+                'sudo', vm_, __opts__, default=(ssh_username != 'root')
+            ),
+            'sudo_password': config.get_config_value(
+                'sudo_password', vm_, __opts__, default=None
+            ),
+            'tty': config.get_config_value(
+                'tty', vm_, __opts__, default=False
+            ),
             'display_ssh_output': config.get_config_value(
                 'display_ssh_output', vm_, __opts__, default=True
             ),
@@ -395,13 +416,18 @@ def create(vm_):
             )
 
         # Store what was used to the deploy the VM
-        data['deploy_kwargs'] = deploy_kwargs
+        event_kwargs = copy.deepcopy(deploy_kwargs)
+        del(event_kwargs['minion_pem'])
+        del(event_kwargs['minion_pub'])
+        del(event_kwargs['sudo_password'])
+        if 'password' in event_kwargs:
+            del(event_kwargs['password'])
 
         saltcloud.utils.fire_event(
             'event',
             'executing deploy script',
             'salt/cloud/{0}/deploying'.format(vm_['name']),
-            {'kwargs': deploy_kwargs},
+            {'kwargs': event_kwargs},
         )
 
         deployed = False

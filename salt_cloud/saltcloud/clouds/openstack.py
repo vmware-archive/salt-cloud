@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 '''
 OpenStack Cloud Module
 ======================
@@ -67,6 +68,9 @@ configuration at ``/etc/salt/cloud.providers`` or
               - 4402cd51-37ee-435e-a966-8245956dc0e6
           - floating:
               - Ext-Net
+      files:
+          /path/to/dest.txt
+              /local/path/to/src.txt
 
       provider: openstack
       userdata_file: /tmp/userdata.txt
@@ -101,12 +105,24 @@ following option may be useful. Using the old syntax:
       # Ignore IP addresses on this network for bootstrap
       ignore_cidr: 192.168.50.0/24
 
+It is possible to upload a small set of files (no more than 5, and nothing too
+large) to the remote server. Generally this should not be needed, as salt itself
+can upload to the server after it is spun up, with nowhere near the same
+restrictions.
+
+.. code-block:: yaml
+
+    my-openstack-config:
+      files:
+          /path/to/dest.txt
+              /local/path/to/src.txt
 '''
 
 # The import section is mostly libcloud boilerplate
 
 # Import python libs
 import os
+import copy
 import logging
 import socket
 import pprint
@@ -145,7 +161,7 @@ from saltcloud.exceptions import (
 try:
     from netaddr import all_matching_cidrs
     HAS_NETADDR = True
-except:
+except ImportError:
     HAS_NETADDR = False
 
 # Get logging started
@@ -166,6 +182,7 @@ reboot = namespaced_function(reboot, globals())
 list_nodes = namespaced_function(list_nodes, globals())
 list_nodes_full = namespaced_function(list_nodes_full, globals())
 list_nodes_select = namespaced_function(list_nodes_select, globals())
+show_instance = namespaced_function(show_instance, globals())
 
 
 # Only load in this module is the OPENSTACK configurations are in place
@@ -267,7 +284,7 @@ def preferred_ip(vm_, ips):
         try:
             socket.inet_pton(family, ip)
             return ip
-        except:
+        except Exception:
             continue
 
         return False
@@ -285,7 +302,7 @@ def ignore_cidr(vm_, ip):
         'ignore_cidr', vm_, __opts__, default='', search_global=False
     )
     if cidr != '' and all_matching_cidrs(ip, [cidr]):
-        log.warning("IP '%s' found within '%s'; ignoring it.'" % (ip, cidr))
+        log.warning('IP "{0}" found within "{1}"; ignoring it.'.format(ip, cidr))
         return True
 
     return False
@@ -415,7 +432,6 @@ def create(vm_):
             g for g in avail_groups if g.name in group_list
         ]
 
-
     networks = config.get_config_value(
         'networks', vm_, __opts__, search_global=False
     )
@@ -446,6 +462,15 @@ def create(vm_):
                         net['floating']
                     )
 
+    files = config.get_config_value(
+        'files', vm_, __opts__, search_global=False
+    )
+    if files:
+        kwargs['ex_files'] = {}
+        for src_path in files:
+            with salt.utils.fopen(files[src_path], 'r') as fp_:
+                kwargs['ex_files'][src_path] = fp_.read()
+
     userdata_file = config.get_config_value(
         'userdata_file', vm_, __opts__, search_global=False
     )
@@ -463,11 +488,19 @@ def create(vm_):
                     'size': kwargs['size'].name}},
     )
 
+    kwargs['ex_metadata'] = config.get_config_value(
+        'metadata', vm_, __opts__, default={}, search_global=False
+    )
+    if not isinstance(kwargs['ex_metadata'], dict):
+        raise SaltCloudConfigError(
+                '\'metadata\' should be a dict.'
+        )
+
     try:
         data = conn.create_node(**kwargs)
     except Exception as exc:
         log.error(
-            'Error creating {0} on OPENSTACK\n\n'
+            'Error creating {0} on OpenStack\n\n'
             'The following exception was thrown by libcloud when trying to '
             'run the initial deployment: {1}\n'.format(
                 vm_['name'], exc
@@ -488,7 +521,7 @@ def create(vm_):
                     )
                 )
             )
-        except Exception, err:
+        except Exception as err:
             log.error(
                 'Failed to get nodes list: {0}'.format(
                     err
@@ -529,9 +562,9 @@ def create(vm_):
                 ip = floating[0].ip_address
                 conn.ex_attach_floating_ip_to_node(data, ip)
                 log.info(
-                    "Attaching floating IP '%s' to node '%s'" % (ip, name)
+                    'Attaching floating IP "{0}" to node "{1}"'.format(ip, name)
                 )
-            except Exception as e:
+            except Exception:
                 # Note(pabelanger): Because we loop, we only want to attach the
                 # floating IP address one. So, expect failures if the IP is
                 # already attached.
@@ -566,7 +599,7 @@ def create(vm_):
                 return data
 
         if result:
-            log.debug('result = %s' % result)
+            log.debug('result = {0}'.format(result))
             data.private_ips = result
             if ssh_interface(vm_) == 'private_ips':
                 return data
@@ -599,7 +632,7 @@ def create(vm_):
     if ssh_interface(vm_) == 'private_ips':
         ip_address = preferred_ip(vm_, data.private_ips)
     elif (rackconnect(vm_) is True and ssh_interface(vm_) != 'private_ips'):
-            ip_address = data.public_ips
+        ip_address = data.public_ips
     else:
         ip_address = preferred_ip(vm_, data.public_ips)
     log.debug('Using IP address {0}'.format(ip_address))
@@ -607,16 +640,32 @@ def create(vm_):
     if not ip_address:
         raise SaltCloudSystemExit('A valid IP address was not found')
 
+    ssh_username = config.get_config_value(
+        'ssh_username', vm_, __opts__, default='root'
+    )
     deploy_kwargs = {
         'host': ip_address,
         'name': vm_['name'],
         'sock_dir': __opts__['sock_dir'],
+        'tmp_dir': config.get_config_value(
+            'tmp_dir', vm_, __opts__, default='/tmp/.saltcloud'
+        ),
+        'deploy_command': config.get_config_value(
+            'deploy_command', vm_, __opts__,
+            default='/tmp/.saltcloud/deploy.sh',
+        ),
         'start_action': __opts__['start_action'],
         'parallel': __opts__['parallel'],
         'minion_pem': vm_['priv_key'],
         'minion_pub': vm_['pub_key'],
         'keep_tmp': __opts__['keep_tmp'],
         'preseed_minion_keys': vm_.get('preseed_minion_keys', None),
+        'sudo': config.get_config_value(
+            'sudo', vm_, __opts__, default=(ssh_username != 'root')
+        ),
+        'sudo_password': config.get_config_value(
+            'sudo_password', vm_, __opts__, default=None
+        ),
         'display_ssh_output': config.get_config_value(
             'display_ssh_output', vm_, __opts__, default=True
         ),
@@ -627,11 +676,7 @@ def create(vm_):
         'minion_conf': saltcloud.utils.minion_config(__opts__, vm_)
     }
 
-    ssh_username = config.get_config_value(
-        'ssh_username', vm_, __opts__, default='root'
-    )
     if ssh_username != 'root':
-        deploy_kwargs['deploy_command'] = '/tmp/deploy.sh'
         deploy_kwargs['username'] = ssh_username
         deploy_kwargs['tty'] = True
 
@@ -687,13 +732,19 @@ def create(vm_):
             )
 
         # Store what was used to the deploy the VM
-        ret['deploy_kwargs'] = deploy_kwargs
+        event_kwargs = copy.deepcopy(deploy_kwargs)
+        del(event_kwargs['minion_pem'])
+        del(event_kwargs['minion_pub'])
+        del(event_kwargs['sudo_password'])
+        if 'password' in event_kwargs:
+            del(event_kwargs['password'])
+        ret['deploy_kwargs'] = event_kwargs
 
         saltcloud.utils.fire_event(
             'event',
             'executing deploy script',
             'salt/cloud/{0}/deploying'.format(vm_['name']),
-            {'kwargs': deploy_kwargs},
+            {'kwargs': event_kwargs},
         )
 
         deployed = False

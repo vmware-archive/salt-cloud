@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 '''
 GoGrid Cloud Module
 ====================
@@ -37,6 +38,7 @@ Using the new format, set up the cloud configuration at
 # The import section is mostly libcloud boilerplate
 
 # Import python libs
+import copy
 import pprint
 import logging
 
@@ -63,6 +65,7 @@ destroy = namespaced_function(destroy, globals())
 list_nodes = namespaced_function(list_nodes, globals())
 list_nodes_full = namespaced_function(list_nodes_full, globals())
 list_nodes_select = namespaced_function(list_nodes_select, globals())
+show_instance = namespaced_function(show_instance, globals())
 
 
 # Only load in this module is the GOGRID configurations are in place
@@ -161,15 +164,26 @@ def create(vm_):
         )
         return False
 
+    ssh_username = config.get_config_value(
+        'ssh_username', vm_, __opts__, default='root'
+    )
+
     ret = {}
     if config.get_config_value('deploy', vm_, __opts__) is True:
         deploy_script = script(vm_)
         deploy_kwargs = {
             'host': data.public_ips[0],
-            'username': 'root',
+            'username': ssh_username,
             'password': data.extra['password'],
             'script': deploy_script.script,
             'name': vm_['name'],
+            'tmp_dir': config.get_config_value(
+                'tmp_dir', vm_, __opts__, default='/tmp/.saltcloud'
+            ),
+            'deploy_command': config.get_config_value(
+                'deploy_command', vm_, __opts__,
+                default='/tmp/.saltcloud/deploy.sh',
+            ),
             'start_action': __opts__['start_action'],
             'parallel': __opts__['parallel'],
             'sock_dir': __opts__['sock_dir'],
@@ -178,6 +192,15 @@ def create(vm_):
             'minion_pub': vm_['pub_key'],
             'keep_tmp': __opts__['keep_tmp'],
             'preseed_minion_keys': vm_.get('preseed_minion_keys', None),
+            'sudo': config.get_config_value(
+                'sudo', vm_, __opts__, default=(ssh_username != 'root')
+            ),
+            'sudo_password': config.get_config_value(
+                'sudo_password', vm_, __opts__, default=None
+            ),
+            'tty': config.get_config_value(
+                'tty', vm_, __opts__, default=False
+            ),
             'display_ssh_output': config.get_config_value(
                 'display_ssh_output', vm_, __opts__, default=True
             ),
@@ -217,13 +240,19 @@ def create(vm_):
             )
 
         # Store what was used to the deploy the VM
-        ret['deploy_kwargs'] = deploy_kwargs
+        event_kwargs = copy.deepcopy(deploy_kwargs)
+        del(event_kwargs['minion_pem'])
+        del(event_kwargs['minion_pub'])
+        del(event_kwargs['sudo_password'])
+        if 'password' in event_kwargs:
+            del(event_kwargs['password'])
+        ret['deploy_kwargs'] = event_kwargs
 
         saltcloud.utils.fire_event(
             'event',
             'executing deploy script',
             'salt/cloud/{0}/deploying'.format(vm_['name']),
-            {'kwargs': deploy_kwargs},
+            {'kwargs': event_kwargs},
         )
 
         deployed = False

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 '''
 The AWS Cloud Module
 ====================
@@ -42,6 +43,7 @@ Using the new format, set up the cloud configuration at
       provider: aws
 
 '''
+# pylint: disable=E0102
 
 # Import python libs
 import os
@@ -121,7 +123,7 @@ def __virtual__():
 
     global avail_images, avail_sizes, script, list_nodes
     global avail_locations, list_nodes_full, list_nodes_select, get_image
-    global get_size, libcloudfuncs_destroy
+    global get_size, libcloudfuncs_destroy, show_instance
 
     # open a connection in a specific region
     conn = get_conn(**{'location': get_location()})
@@ -141,6 +143,7 @@ def __virtual__():
     libcloudfuncs_destroy = namespaced_function(
         libcloudfuncs_destroy, globals(), (conn,)
     )
+    show_instance = namespaced_function(show_instance, globals())
 
     log.debug('Loading Libcloud AWS cloud module')
     return __virtualname__
@@ -225,8 +228,9 @@ def iam_profile(vm_):
 
 def block_device_mappings(vm_):
     '''
-    Return the block device mapping
-    e.g. [{'DeviceName': '/dev/sdb', 'VirtualName': 'ephemeral0'},
+    Return the block device mapping::
+
+        [{'DeviceName': '/dev/sdb', 'VirtualName': 'ephemeral0'},
           {'DeviceName': '/dev/sdc', 'VirtualName': 'ephemeral1'}]
     '''
     return config.get_config_value(
@@ -361,6 +365,11 @@ def create(vm_):
         raise SaltCloudConfigError(
                 '\'tag\' should be a dict.'
         )
+    kwargs['ex_metadata'] = config.get_config_value('metadata', vm_, __opts__, default={}, search_global=False)
+    if not isinstance(kwargs['ex_metadata'], dict):
+        raise SaltCloudConfigError(
+                '\'metadata\' should be a dict.'
+        )
 
     try:
         data = conn.create_node(**kwargs)
@@ -446,12 +455,23 @@ def create(vm_):
             'host': ip_address,
             'username': username,
             'key_filename': key_filename,
-            'deploy_command': '/tmp/deploy.sh',
-            'tty': True,
+            'tmp_dir': config.get_config_value(
+                'tmp_dir', vm_, __opts__, default='/tmp/.saltcloud'
+            ),
+            'deploy_command': config.get_config_value(
+                'deploy_command', vm_, __opts__,
+                default='/tmp/.saltcloud/deploy.sh',
+            ),
+            'tty': config.get_config_value(
+                'tty', vm_, __opts__, default=True
+            ),
             'script': deploy_script.script,
             'name': vm_['name'],
             'sudo': config.get_config_value(
                 'sudo', vm_, __opts__, default=(username != 'root')
+            ),
+            'sudo_password': config.get_config_value(
+                'sudo_password', vm_, __opts__, default=None
             ),
             'start_action': __opts__['start_action'],
             'parallel': __opts__['parallel'],
@@ -716,7 +736,7 @@ def rename(name, kwargs, call=None):
         saltcloud.utils.rename_key(
             __opts__['pki_dir'], name, kwargs['newname']
         )
-    except Exception, exc:
+    except Exception as exc:
         log.error(
             'Failed to rename {0} to {1}: {2}\n'.format(
                 name, kwargs['newname'], exc

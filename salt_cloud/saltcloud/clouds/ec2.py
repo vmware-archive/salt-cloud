@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 '''
 The EC2 Cloud Module
 ====================
@@ -60,9 +61,11 @@ Using the new format, set up the cloud configuration at
       provider: ec2
 
 '''
+# pylint: disable=E0102
 
 # Import python libs
 import os
+import copy
 import sys
 import stat
 import time
@@ -80,7 +83,7 @@ import urllib
 import urllib2
 
 # Import salt libs
-from salt._compat import ElementTree as ET
+from saltcloud._compat import ElementTree as ET
 
 # Import saltcloud libs
 import saltcloud.utils
@@ -725,6 +728,7 @@ def securitygroupid(vm_):
         'securitygroupid', vm_, __opts__, search_global=False
     )
 
+
 def get_spot_config(vm_):
     '''
     Returns the spot instance configuration for the provided vm
@@ -753,13 +757,15 @@ def list_availability_zones():
 
 def block_device_mappings(vm_):
     '''
-    Return the block device mapping
-    e.g. [{'DeviceName': '/dev/sdb', 'VirtualName': 'ephemeral0'},
+    Return the block device mapping::
+
+        [{'DeviceName': '/dev/sdb', 'VirtualName': 'ephemeral0'},
           {'DeviceName': '/dev/sdc', 'VirtualName': 'ephemeral1'}]
     '''
     return config.get_config_value(
         'block_device_mappings', vm_, __opts__, search_global=True
     )
+
 
 def _param_from_config(key, data):
     '''
@@ -793,12 +799,12 @@ def _param_from_config(key, data):
 
     if isinstance(data, dict):
         for k, v in data.items():
-            param.update( _param_from_config('%s.%s' % (key, k), v) )
+            param.update(_param_from_config('{0}.{1}'.format(key, k), v))
 
     elif isinstance(data, list) or isinstance(data, tuple):
         for idx, conf_item in enumerate(data):
-            prefix = '%s.%d' % (key, idx)
-            param.update( _param_from_config(prefix, conf_item) )
+            prefix = '{0}.{1}'.format(key, idx)
+            param.update(_param_from_config(prefix, conf_item))
 
     else:
         if isinstance(data, bool):
@@ -808,6 +814,7 @@ def _param_from_config(key, data):
             param.update({key: data})
 
     return param
+
 
 def create(vm_=None, call=None):
     '''
@@ -905,7 +912,6 @@ def create(vm_=None, call=None):
             raise SaltCloudConfigError(
                 '\'iam_profile\' should be a string value.'
             )
-        pass
 
     az_ = get_availability_zone(vm_)
     if az_ is not None:
@@ -989,7 +995,7 @@ def create(vm_=None, call=None):
 
         if rd_name is not None:
             if ex_blockdevicemappings:
-                dev_list = [ dev['DeviceName'] for dev in ex_blockdevicemappings ]
+                dev_list = [dev['DeviceName'] for dev in ex_blockdevicemappings]
             else:
                 dev_list = []
 
@@ -1274,12 +1280,23 @@ def create(vm_=None, call=None):
             'host': ip_address,
             'username': username,
             'key_filename': key_filename,
-            'deploy_command': '/tmp/deploy.sh',
-            'tty': True,
+            'tmp_dir': config.get_config_value(
+                'tmp_dir', vm_, __opts__, default='/tmp/.saltcloud'
+            ),
+            'deploy_command': config.get_config_value(
+                'deploy_command', vm_, __opts__,
+                default='/tmp/.saltcloud/deploy.sh',
+            ),
+            'tty': config.get_config_value(
+                'tty', vm_, __opts__, default=True
+            ),
             'script': deploy_script,
             'name': vm_['name'],
             'sudo': config.get_config_value(
                 'sudo', vm_, __opts__, default=(username != 'root')
+            ),
+            'sudo_password': config.get_config_value(
+                'sudo_password', vm_, __opts__, default=None
             ),
             'start_action': __opts__['start_action'],
             'parallel': __opts__['parallel'],
@@ -1327,13 +1344,20 @@ def create(vm_=None, call=None):
                 'win_password', vm_, __opts__, default=''
             )
 
-        ret['deploy_kwargs'] = deploy_kwargs
+        # Store what was used to the deploy the VM
+        event_kwargs = copy.deepcopy(deploy_kwargs)
+        del(event_kwargs['minion_pem'])
+        del(event_kwargs['minion_pub'])
+        del(event_kwargs['sudo_password'])
+        if 'password' in event_kwargs:
+            del(event_kwargs['password'])
+        ret['deploy_kwargs'] = event_kwargs
 
         saltcloud.utils.fire_event(
             'event',
             'executing deploy script',
             'salt/cloud/{0}/deploying'.format(vm_['name']),
-            {'kwargs': deploy_kwargs},
+            {'kwargs': event_kwargs},
         )
 
         deployed = False
