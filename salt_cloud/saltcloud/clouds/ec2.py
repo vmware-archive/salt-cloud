@@ -83,7 +83,7 @@ import urllib
 import urllib2
 
 # Import salt libs
-from salt._compat import ElementTree as ET
+from saltcloud._compat import ElementTree as ET
 
 # Import saltcloud libs
 import saltcloud.utils

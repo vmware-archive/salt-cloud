@@ -43,7 +43,7 @@ import logging
 
 # Import salt libs
 import salt.utils
-from salt._compat import ElementTree as ET
+from saltcloud._compat import ElementTree as ET
 
 # Import salt cloud libs
 import saltcloud.utils
