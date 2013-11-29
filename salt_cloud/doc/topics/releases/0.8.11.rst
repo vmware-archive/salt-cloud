@@ -1,0 +1,33 @@
+===============================
+Salt Cloud 0.8.11 Release Notes
+===============================
+
+Welcome to 0.8.11! This is a bugfix release for 0.8.10, which contained some
+issues concerning EC2. The entire repository has been merged upstream into the
+main Salt repository. All future changes will be found there, and any future
+issues and pull requests need to be filed there:
+
+https://github.com/saltstack/salt
+
+Existing issues in the Salt Cloud issue tracker will remain there, and efforts
+to close standing issues there will continue. We will not, however, be able to
+merge additional pull requests made against the old salt-cloud repository.
+
+
+Documentation
+=============
+The documentation for Salt Cloud can be found on Read the Docs:
+http://salt-cloud.readthedocs.org
+
+
+Download
+========
+Salt Cloud can be downloaded and install via pypi:
+
+http://pypi.python.org/packages/source/s/salt-cloud/salt-cloud-0.8.11.tar.gz
+
+Some packages have been made available for salt-cloud and more on on their
+way. Packages for Arch and FreeBSD are being made available thanks to the
+work of Christer Edwards, and packages for RHEL and Fedora are being created
+by Clint Savage. The Ubuntu PPA is being managed by Sean Channel. Package
+availability will be announced on the salt mailing list.
