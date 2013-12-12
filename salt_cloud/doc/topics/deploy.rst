@@ -64,13 +64,37 @@ the salt-bootstrap script, such as updating to specific git tags.
 Post-Deploy Commands
 ====================
 
-Once a minion has been deployed, it has the option to run a salt command.  
-Normally, this would be the state.highstate command, which would finish 
-provisioning the VM. Another common option is state.sls, or for just testing, 
-test.ping. This is configured in the main cloud config file:
+The best way to run a command on a new minion, is using 
+Salt's Reactor system:
+
+http://docs.saltstack.com/topics/reactor/index.html
+
+A common use would be running highstate on the newly setup minion. First
+the salt-cloud 'created' event has to be watched for in the Master config:
 
 .. code-block:: yaml
 
+    # /etc/salt/master.d/reactor.conf:
+    reactor:
+      - 'salt/cloud/*/created':
+        - /srv/reactor/created.sls
+
+Then the created.sls file takes the data passed from the event and uses
+it to run highstate on the minion:
+
+.. code-block:: yaml
+
+    # /srv/reactor/created.sls:
+    highstate_run:
+      cmd.state.highstate:
+        - tgt: {{ data['name'] }}
+
+Alternatively, there is experimental support to add a start action in the main
+cloud config file:
+
+.. code-block:: yaml
+
+    # /etc/salt/cloud
     start_action: state.highstate
 
 
