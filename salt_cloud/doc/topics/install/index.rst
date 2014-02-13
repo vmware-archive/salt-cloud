@@ -17,7 +17,7 @@ Clone the repository using:
 
 .. code-block:: bash
 
-    git clone https://github.com/saltstack/salt-cloud.git
+    git clone https://github.com/saltstack/salt.git
 
 
 Create a new `virtualenv`_:
@@ -50,14 +50,14 @@ Activate the virtualenv:
 
 .. _dependencies:
 
-Install Salt Cloud (and dependencies) into the virtualenv:
+Install Salt (which contains Salt Cloud) (and dependencies) into the virtualenv:
 
 .. code-block:: bash
 
     pip install M2Crypto    # Don't install on Debian/Ubuntu (see below)
-    pip install pyzmq PyYAML pycrypto msgpack-python jinja2 psutil salt
+    pip install pyzmq PyYAML pycrypto msgpack-python jinja2 psutil
     pip install apache-libcloud
-    pip install -e ./salt-cloud   # the path to the salt-cloud git clone
+    pip install -e ./salt   # the path to the salt-cloud git clone
 
 
 .. note:: Installing M2Crypto
