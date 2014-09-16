@@ -149,7 +149,7 @@ wait_for_ip_timeout
 ~~~~~~~~~~~~~~~~~~~
 
 The amount of time Salt Cloud should wait for a VM to start and get an IP back 
-from the cloud provider. Default: 5 minutes.
+from the cloud provider. Default: 10 minutes.
 
 
 wait_for_ip_interval
