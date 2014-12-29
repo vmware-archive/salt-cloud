@@ -1,5 +1,6 @@
 Install Salt Cloud
 ==================
+Salt Cloud is now part of Salt proper. It was merged in as of Salt version 2014.1.0.
 
 Salt Cloud has only two dependencies:
 
