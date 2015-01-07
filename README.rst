@@ -2,18 +2,32 @@
 ``salt-cloud`` is Now Part of Salt!
 ===================================
 
-.. note:: This repository is deprecated.
+The ``salt-cloud`` project `has been merged into the main Salt repository
+as of Salt's 2014.1 release`__.
 
-    All new pull requests and issues should be filed against the `main Salt
-    repository`__.
+.. __: http://docs.saltstack.com/en/latest/topics/releases/2014.1.0.html#salt-cloud-merged-into-salt
 
-The Salt team is excited to report that the ``salt-cloud`` repository has been
-merged into the main Salt repository.
+We recommend installing salt-cloud using a package manager as usual. Some
+distributions (RHEL/Cent) have split packages and so the package name will
+be ``salt-cloud`` and require a separate install. Some distributions do not
+split packages and it will be bundled within the ``salt-master`` package.
 
-The merge happened on November 8th, 2013 in `pull request #8352`__.
+Verify which version you have installed by running ``salt-cloud
+--version``; if the version number does not start with ``2014`` you are
+running an old release.
 
-.. __: https://github.com/saltstack/salt
-.. __: https://github.com/saltstack/salt/pull/8352
+No further development will take place in this repository. It will be left
+in the current state for historical purposes. Issues should be filed on the
+Salt repository.
+
+Current documentation now lives within the main Salt documentation.
+
+* `The main salt-cloud Table of Contents
+    <http://docs.saltstack.com/en/latest/topics/cloud/index.html>`_
+* `Full list of cloud modules
+    <http://docs.saltstack.com/en/latest/salt-modindex.html#cap-c>`_
+* `Archived release notes
+    <http://docs.saltstack.com/en/latest/topics/cloud/releases/index.html>`_
 
 Frequently asked questions
 --------------------------
