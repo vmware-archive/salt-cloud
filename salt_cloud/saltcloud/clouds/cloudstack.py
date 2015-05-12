@@ -174,6 +174,19 @@ def get_keypair(vm_):
         return False
 
 
+def get_project(conn, vm_):
+    '''
+    Return the project 
+    '''
+    projectid = config.get_config_value('projectid', vm_, __opts__)
+    if projectid:
+        project = next((p for p in conn.ex_list_projects() if p.id == projectid), None)
+        return project
+
+    else:
+        return None
+
+
 def get_ip(data):
     '''
     Return the IP address of the VM
@@ -187,14 +200,13 @@ def get_ip(data):
     return ip
 
 
-def get_networkid(vm_):
+def get_networks(conn, project,  vm_):
     '''
     Return the networkid to use, only valid for Advanced Zone
     '''
-    networkid = config.get_config_value('networkid', vm_, __opts__)
-
-    if networkid is not None:
-        return networkid
+    networkids = config.get_config_value('networkids', vm_, __opts__)
+    if networkids is not None:
+        return [n for n in conn.ex_list_networks(project) if n.id in networkids.split(',')]
     else:
         return False
 
@@ -226,8 +238,15 @@ def create(vm_):
     if get_keypair(vm_) is not False:
         kwargs['extra_args'] = {'keypair': get_keypair(vm_)}
 
-    if get_networkid(vm_) is not False:
-        kwargs['networkids'] = get_networkid(vm_)
+
+    project = get_project(conn, vm_)
+    if project is not None: 
+        kwargs['project'] = project
+
+    networks = get_networks(conn, project, vm_)
+    if networks is not False:
+        kwargs['networks'] = networks
+        
 
     saltcloud.utils.fire_event(
         'event',
@@ -237,6 +256,7 @@ def create(vm_):
                     'image': kwargs['image'].name,
                     'size': kwargs['size'].name}},
     )
+
 
     try:
         data = conn.create_node(**kwargs)
