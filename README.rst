@@ -69,3 +69,8 @@ Has the commit history and authorship for ``salt-cloud`` been lost?
     Note, any commit messages that reference GitHub issues from a commit from
     ``salt-cloud`` will get confused and link to the corresponding issue in the
     Salt repository (if there is one of that same issue number).
+
+
+.. image:: https://badges.gitter.im/saltstack/salt-cloud.svg
+   :alt: Join the chat at https://gitter.im/saltstack/salt-cloud
+   :target: https://gitter.im/saltstack/salt-cloud?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
